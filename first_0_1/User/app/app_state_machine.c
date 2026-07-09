@@ -112,6 +112,12 @@ void App_SM_Run(void)
         {
             App_SM_SetState(STATE_AVOID, 3000);
         }
+        else if (SM_Timeout())
+        {
+            /* Stop all motors before returning to search */
+            App_Ctrl_StopAll();
+            App_SM_SetState(STATE_SEARCH, 0);
+        }
         else if (packetReady)
         {
             pkt = App_Protocol_GetPacket();
@@ -120,10 +126,6 @@ void App_SM_Run(void)
                 App_Ctrl_SetTarget(pkt->x, pkt->y);
             }
             App_Ctrl_ApproachTarget();
-        }
-        else if (SM_Timeout())
-        {
-            App_SM_SetState(STATE_SEARCH, 0);
         }
         else
         {
@@ -141,7 +143,7 @@ void App_SM_Run(void)
         }
         break;
 
-    /* ---- AVOID: turn 60° toward open direction ---- */
+    /* ---- AVOID: turn 60 toward open direction ---- */
     case STATE_AVOID:
     {
         float leftDist  = BSP_Ultrasonic_GetLeft();

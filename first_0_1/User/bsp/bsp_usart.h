@@ -21,4 +21,7 @@ uint8_t BSP_USART_GetRxByte(void);
 uint8_t BSP_USART_RxAvailable(void);
 void BSP_USART_ClearRx(void);
 
+/* Overrun error counter — non-zero indicates serial data loss */
+uint32_t BSP_USART_GetOreCount(void);
+
 #endif

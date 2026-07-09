@@ -7,6 +7,9 @@
 #define US_LEFT     1
 #define US_RIGHT    2
 
+/* First-order low-pass filter coefficient (0~1, higher = less smoothing) */
+#define US_FILTER_ALPHA     0.3f
+
 /* Front: Trig=PA6, Echo=PA7 */
 #define US_F_TRIG_PORT   GPIOA
 #define US_F_TRIG_PIN    GPIO_Pin_6

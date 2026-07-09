@@ -36,7 +36,7 @@ void App_Task_Scheduler(void)
     /* ---- 10ms: USART poll + MPU6050 + attitude update ---- */
     if (now - g_lastRun[TASK_10MS] >= g_period[TASK_10MS])
     {
-        g_lastRun[TASK_10MS] = now;
+        g_lastRun[TASK_10MS] += g_period[TASK_10MS];  /* use += to prevent burst on catch-up */
 
         while (BSP_USART_RxAvailable())
         {
@@ -56,27 +56,27 @@ void App_Task_Scheduler(void)
     /* ---- 20ms: state machine ---- */
     if (now - g_lastRun[TASK_20MS] >= g_period[TASK_20MS])
     {
-        g_lastRun[TASK_20MS] = now;
+        g_lastRun[TASK_20MS] += g_period[TASK_20MS];
         App_SM_Run();
     }
 
-    /* ---- 50ms: attitude correction on motors ---- */
+    /* ---- 50ms: attitude correction on motors (reserved) ---- */
     if (now - g_lastRun[TASK_50MS] >= g_period[TASK_50MS])
     {
-        g_lastRun[TASK_50MS] = now;
+        g_lastRun[TASK_50MS] += g_period[TASK_50MS];
     }
 
     /* ---- 100ms: LED heartbeat ---- */
     if (now - g_lastRun[TASK_100MS] >= g_period[TASK_100MS])
     {
-        g_lastRun[TASK_100MS] = now;
+        g_lastRun[TASK_100MS] += g_period[TASK_100MS];
         BSP_LED_Toggle();
     }
 
     /* ---- 200ms: status telemetry ---- */
     if (now - g_lastRun[TASK_200MS] >= g_period[TASK_200MS])
     {
-        g_lastRun[TASK_200MS] = now;
+        g_lastRun[TASK_200MS] += g_period[TASK_200MS];
         App_Protocol_SendStatus(
             App_SM_GetStateName(),
             Algo_Filter_GetPitch(),
@@ -90,13 +90,13 @@ void App_Task_Scheduler(void)
     /* ---- 500ms: reserved ---- */
     if (now - g_lastRun[TASK_500MS] >= g_period[TASK_500MS])
     {
-        g_lastRun[TASK_500MS] = now;
+        g_lastRun[TASK_500MS] += g_period[TASK_500MS];
     }
 
     /* ---- 1000ms: reserved ---- */
     if (now - g_lastRun[TASK_1000MS] >= g_period[TASK_1000MS])
     {
-        g_lastRun[TASK_1000MS] = now;
+        g_lastRun[TASK_1000MS] += g_period[TASK_1000MS];
     }
 }
 

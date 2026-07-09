@@ -4,15 +4,22 @@
 #include "stm32f10x.h"
 #include "algorithm/algo_pid.h"
 
+/* K230 image center reference */
 #define IMG_CENTER_X    0
 #define IMG_CENTER_Y    0
+
+/* Deadband: target within +/-20 pixels = straight-ahead, no PID correction */
 #define IMG_DEADBAND    20
 
+/* Motor speeds (PWM values, range 0~7200) */
 #define CRUISE_SPEED    2500
 #define APPROACH_SPEED  3000
 #define TURN_SPEED      2000
 #define COLLECT_SPEED   4000
 #define AVOID_SPEED     2800
+
+/* Motor ramp rate: PWM increment per 10ms call (200/10ms = 20% per second at 7000) */
+#define RAMP_STEP       200
 
 void App_Ctrl_Init(void);
 void App_Ctrl_SetTarget(int16_t x, int16_t y);

@@ -3,6 +3,7 @@
 static volatile uint8_t g_rxBuf[USART_RX_BUF_SIZE];
 static volatile uint16_t g_rxHead = 0;
 static volatile uint16_t g_rxTail = 0;
+static volatile uint32_t g_oreCount = 0;
 
 void BSP_USART_Init(uint32_t baudrate)
 {
@@ -12,13 +13,13 @@ void BSP_USART_Init(uint32_t baudrate)
 
     RCC_APB2PeriphClockCmd(K230_USART_CLK | K230_USART_GPIO_CLK, ENABLE);
 
-    GPIO_InitStructure.GPIO_Pin  = K230_USART_TX_PIN;
-    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
+    GPIO_InitStructure.GPIO_Pin   = K230_USART_TX_PIN;
+    GPIO_InitStructure.GPIO_Mode  = GPIO_Mode_AF_PP;
     GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
     GPIO_Init(K230_USART_GPIO, &GPIO_InitStructure);
 
-    GPIO_InitStructure.GPIO_Pin  = K230_USART_RX_PIN;
-    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+    GPIO_InitStructure.GPIO_Pin   = K230_USART_RX_PIN;
+    GPIO_InitStructure.GPIO_Mode  = GPIO_Mode_IN_FLOATING;
     GPIO_Init(K230_USART_GPIO, &GPIO_InitStructure);
 
     USART_InitStructure.USART_BaudRate            = baudrate;
@@ -73,10 +74,12 @@ void USART1_IRQHandler(void)
             g_rxBuf[g_rxHead] = ch;
             g_rxHead = nextHead;
         }
+        /* else: buffer full, byte dropped */
     }
     if (USART_GetITStatus(K230_USART, USART_IT_ORE) != RESET)
     {
-        USART_ReceiveData(K230_USART);
+        g_oreCount++;
+        USART_ReceiveData(K230_USART);  /* Clear ORE flag */
     }
 }
 
@@ -100,4 +103,9 @@ void BSP_USART_ClearRx(void)
 {
     g_rxHead = 0;
     g_rxTail = 0;
+}
+
+uint32_t BSP_USART_GetOreCount(void)
+{
+    return g_oreCount;
 }

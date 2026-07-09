@@ -13,4 +13,10 @@ void DebugMon_Handler(void);
 void PendSV_Handler(void);
 void SysTick_Handler(void);
 
+/* C-level entry points to read stacked register frame for crash dump */
+void HardFault_Handler_C(uint32_t *stack);
+void MemManage_Handler_C(uint32_t *stack);
+void BusFault_Handler_C(uint32_t *stack);
+void UsageFault_Handler_C(uint32_t *stack);
+
 #endif

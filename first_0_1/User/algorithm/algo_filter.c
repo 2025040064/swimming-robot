@@ -27,20 +27,22 @@ static float fast_atan2(float y, float x)
 }
 
 /*
- * Fast sqrt via integer initial guess + 2 Newton iterations
+ * Fast sqrt via integer initial guess + 2 Newton iterations.
+ * Uses union for type-punning (safe across all compilers).
  */
 static float fast_sqrt(float x)
 {
+    union { float f; int32_t i; } u;
     float r;
-    int32_t i;
 
     if (x < 0.0001f) return 0.0f;
 
-    /* Bit-level half exponent seed */
-    i = *(int32_t *)&x;
-    i = (i >> 1) + 0x1FC00000;
-    r = *(float *)&i;
+    /* Bit-level half exponent seed via union (no strict-aliasing violation) */
+    u.f = x;
+    u.i = (u.i >> 1) + 0x1FC00000;
+    r = u.f;
 
+    /* Two Newton-Raphson iterations */
     r = 0.5f * (r + x / r);
     r = 0.5f * (r + x / r);
     return r;
