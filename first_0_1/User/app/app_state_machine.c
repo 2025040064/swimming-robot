@@ -143,13 +143,26 @@ void App_SM_Run(void)
         }
         break;
 
-    /* ---- AVOID: turn 60 toward open direction ---- */
+    /* ---- AVOID: turn toward open direction, exit early if path clears ---- */
     case STATE_AVOID:
     {
-        float leftDist  = BSP_Ultrasonic_GetLeft();
-        float rightDist = BSP_Ultrasonic_GetRight();
-        g_avoidDir = (leftDist >= rightDist) ? 1 : 2;
-        App_Ctrl_AvoidTurn(g_avoidDir);
+        BSP_Ultrasonic_Update();
+
+        /* Path ahead is clear — stop avoiding early */
+        if (BSP_Ultrasonic_GetFront() > 80.0f)
+        {
+            App_Ctrl_StopAll();
+            App_SM_SetState(STATE_SEARCH, 0);
+            break;
+        }
+
+        /* Re-evaluate which side has more room every cycle */
+        {
+            float leftDist  = BSP_Ultrasonic_GetLeft();
+            float rightDist = BSP_Ultrasonic_GetRight();
+            g_avoidDir = (leftDist > rightDist) ? 1 : 2;
+            App_Ctrl_AvoidTurn(g_avoidDir);
+        }
 
         if (SM_Timeout())
         {
