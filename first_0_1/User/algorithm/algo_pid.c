@@ -1,3 +1,4 @@
+#include "stm32f10x.h"                  // Device header
 #include "algo_pid.h"
 
 void Algo_PID_Init(PID_t *pid, float kp, float ki, float kd, float outMin, float outMax)
@@ -13,7 +14,7 @@ void Algo_PID_Init(PID_t *pid, float kp, float ki, float kd, float outMin, float
     pid->outputMax   = outMax;
 }
 
-float Algo_PID_Compute(PID_t *pid, float input, float dt)
+float Algo_PID_Compute(PID_t *pid, float input, float dt)  
 {
     float error, derivative, output;
 

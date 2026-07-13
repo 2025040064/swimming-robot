@@ -1,13 +1,3 @@
-/**
- * Water Surface Garbage Cleaning Robot
- * STM32F103C8T6 + K230 + TB6612 + AJ-SRP04M + MPU6050
- *
- * Clock: startup_stm32f10x_md.s -> SystemInit() -> 72MHz HSE+PLL (already done before main)
- *
- * Watchdog: IWDG with 1.6s timeout. Fed in main loop. If any module hangs,
- * the system auto-resets. Debug: DBGMCU_IWDG_STOP freezes IWDG at breakpoints.
- */
-
 #include "stm32f10x.h"
 #include "system_stm32f10x.h"
 #include "bsp/bsp_systick.h"
@@ -25,18 +15,17 @@
 #include "app/app_protocol.h"
 #include "app/app_control.h"
 #include "app/app_navigation.h"
+#include "Delay.h"
 
-/* ---- IWDG configuration ---- */
 #define IWDG_TIMEOUT_MS     1600    /* 1.6s — must be fed before this expires */
 #define IWDG_PRESCALER      IWDG_Prescaler_64   /* 40kHz/64 = 625 Hz */
 #define IWDG_RELOAD_VAL     ((IWDG_TIMEOUT_MS * 625U) / 1000U)  /* ~1000 */
 
 static void IWDG_Init(void)
 {
-    /* Freeze IWDG during debug halt (prevents unwanted resets at breakpoints) */
     DBGMCU_Config(DBGMCU_IWDG_STOP, ENABLE);
 
-    IWDG_WriteAccessCmd(IWDG_WriteAccess_Enable);
+    IWDG_WriteAccessCmd(IWDG_WriteAccess_Enable);//看门狗
     IWDG_SetPrescaler(IWDG_PRESCALER);
     IWDG_SetReload(IWDG_RELOAD_VAL);
     IWDG_ReloadCounter();
@@ -52,7 +41,6 @@ int main(void)
 {
     SystemCoreClockUpdate();
 
-    /* Watchdog first — protects all subsequent init */
     IWDG_Init();
 
     BSP_SysTick_Init();
