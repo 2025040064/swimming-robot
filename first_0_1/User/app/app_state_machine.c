@@ -14,7 +14,9 @@ static const char *g_stateNames[] =
     "INIT", "SEARCH", "DETECT", "APPROACH", "COLLECT", "AVOID", "RETURN"
 };
 
-static uint8_t g_avoidDir = 0;
+static uint8_t  g_avoidDir = 0;
+static uint8_t  g_avoidClearCnt = 0;    /* consecutive cycles with front > 80cm */
+static uint8_t  g_searchBlockCnt = 0;   /* consecutive cycles with front < 50cm in SEARCH */
 
 void App_SM_Init(void)
 {
@@ -58,20 +60,36 @@ void App_SM_Run(void)
     case STATE_SEARCH:
         BSP_Ultrasonic_Update();
 
+        /*
+         * Debounce obstacle detection: require 2 consecutive <50cm
+         * readings before triggering AVOID, to avoid re-entering
+         * immediately after a rotation-only exit.
+         */
         if (BSP_Ultrasonic_GetFront() < 50.0f)
         {
-            App_SM_SetState(STATE_AVOID, 3000);
+            g_searchBlockCnt++;
+            if (g_searchBlockCnt >= 2)
+            {
+                g_searchBlockCnt = 0;
+                App_SM_SetState(STATE_AVOID, 3000);
+            }
         }
-        else if (packetReady)
+        else
+        {
+            g_searchBlockCnt = 0;
+        }
+
+        if (packetReady && g_state == STATE_SEARCH)
         {
             pkt = App_Protocol_GetPacket();
             if (pkt->type == PKT_TRASH)
             {
+                g_searchBlockCnt = 0;
                 App_Ctrl_SetTarget(pkt->x, pkt->y);
                 App_SM_SetState(STATE_DETECT, 500);
             }
         }
-        else
+        else if (g_state == STATE_SEARCH)
         {
             App_Ctrl_SearchCruise();
         }
@@ -143,18 +161,12 @@ void App_SM_Run(void)
         }
         break;
 
-    /* ---- AVOID: turn toward open direction, exit early if path clears ---- */
+    /* ---- AVOID: turn toward open direction with debounced early-exit ---- */
     case STATE_AVOID:
     {
-        BSP_Ultrasonic_Update();
+        uint32_t elapsed = BSP_GetTick() - g_stateEnterTick;
 
-        /* Path ahead is clear — stop avoiding early */
-        if (BSP_Ultrasonic_GetFront() > 80.0f)
-        {
-            App_Ctrl_StopAll();
-            App_SM_SetState(STATE_SEARCH, 0);
-            break;
-        }
+        BSP_Ultrasonic_Update();
 
         /* Re-evaluate which side has more room every cycle */
         {
@@ -164,9 +176,35 @@ void App_SM_Run(void)
             App_Ctrl_AvoidTurn(g_avoidDir);
         }
 
+        /*
+         * Debounced early-exit: only check after minimum 500ms dwell,
+         * and require 3 consecutive "clear" readings (>80cm).
+         * This prevents the front sensor sweeping across obstacles
+         * during rotation from causing state oscillation.
+         */
+        if (elapsed > 500)
+        {
+            if (BSP_Ultrasonic_GetFront() > 80.0f)
+            {
+                g_avoidClearCnt++;
+                if (g_avoidClearCnt >= 3)
+                {
+                    App_Ctrl_StopAll();
+                    g_avoidClearCnt = 0;
+                    App_SM_SetState(STATE_SEARCH, 0);
+                    break;
+                }
+            }
+            else
+            {
+                g_avoidClearCnt = 0;  /* reset — still blocked */
+            }
+        }
+
         if (SM_Timeout())
         {
             App_Ctrl_StopAll();
+            g_avoidClearCnt = 0;
             App_SM_SetState(STATE_SEARCH, 0);
         }
         break;
