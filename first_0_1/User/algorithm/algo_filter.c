@@ -2,29 +2,12 @@
 
 static Attitude_t g_att;
 
-/*
- * Fast atan2 approximation — max error ~0.001 rad
- * No math library dependency
- */
-static float fast_atan2(float y, float x)
-{
-    float r, angle, abs_y;
-
-    abs_y = (y < 0.0f) ? -y : y;
-
-    if (x >= 0.0f)
-    {
-        r = (x - abs_y) / (x + abs_y + 0.000001f);
-        angle = 0.1963f * r * r * r - 0.9817f * r + 3.14159265f / 4.0f;
-    }
-    else
-    {
-        r = (x + abs_y) / (abs_y - x + 0.000001f);
-        angle = 0.1963f * r * r * r - 0.9817f * r + 3.0f * 3.14159265f / 4.0f;
-    }
-
-    return (y < 0.0f) ? -angle : angle;
-}
+/* ---- Gyro bias calibration state ---- */
+static uint8_t  g_calibrating = 0;
+static int32_t  g_calibSumX   = 0;
+static int32_t  g_calibSumY   = 0;
+static int32_t  g_calibSumZ   = 0;
+static uint16_t g_calibCount  = 0;
 
 /*
  * Fast sqrt via integer initial guess + 2 Newton iterations.
@@ -59,10 +42,49 @@ void Algo_Filter_Init(void)
     g_att.gyroOffsetZ = 0.0f;
 }
 
+/*
+ * Start gyro bias calibration. Subsequent calls to Algo_Filter_Update()
+ * will accumulate raw gyro samples instead of running the filter.
+ * Called once at boot during INIT state.
+ */
+void Algo_Filter_StartCalibration(void)
+{
+    g_calibSumX   = 0;
+    g_calibSumY   = 0;
+    g_calibSumZ   = 0;
+    g_calibCount  = 0;
+    g_calibrating = 1;
+}
+
+/*
+ * Finish calibration: compute average offset from accumulated samples.
+ * The robot MUST be stationary during the calibration window (INIT state).
+ */
+void Algo_Filter_FinishCalibration(void)
+{
+    if (g_calibCount > 0)
+    {
+        g_att.gyroOffsetX = (float)g_calibSumX / (float)g_calibCount;
+        g_att.gyroOffsetY = (float)g_calibSumY / (float)g_calibCount;
+        g_att.gyroOffsetZ = (float)g_calibSumZ / (float)g_calibCount;
+    }
+    g_calibrating = 0;
+}
+
 void Algo_Filter_Update(int16_t *accel, int16_t *gyro, float dt)
 {
     float ax, ay, az, gx, gy, gz;
     float accelPitch, accelRoll;
+
+    /* During calibration: accumulate raw gyro, skip filter */
+    if (g_calibrating)
+    {
+        g_calibSumX += gyro[0];
+        g_calibSumY += gyro[1];
+        g_calibSumZ += gyro[2];
+        g_calibCount++;
+        return;
+    }
 
     /* ±16g → 4096 LSB/g */
     ax = (float)accel[0] / 4096.0f;

@@ -11,7 +11,7 @@
 #define K230_USART_GPIO          GPIOA
 #define K230_USART_IRQn          USART1_IRQn
 
-#define USART_RX_BUF_SIZE        128
+#define USART_RX_BUF_SIZE        256   /* 22ms at 115200 — safe margin over 10ms consumer */
 
 void BSP_USART_Init(uint32_t baudrate);
 void BSP_USART_SendByte(uint8_t ch);

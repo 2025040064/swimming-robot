@@ -32,5 +32,6 @@ void App_Ctrl_StopAll(void);
 void App_Ctrl_ReturnBase(void);
 void App_Ctrl_OnStateChange(uint8_t newState);
 void App_Ctrl_UpdateMotors(int16_t left, int16_t right);
+uint8_t App_Ctrl_GetCruisePhase(void);
 
 #endif

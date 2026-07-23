@@ -7,6 +7,8 @@
 #include "bsp_led.h"
 #include "bsp_usart.h"
 #include "bsp_systick.h"
+#include "bsp_adc.h"
+#include "bsp_debug.h"
 #include "algorithm/algo_filter.h"
 #include "algorithm/algo_pid.h"
 
@@ -93,10 +95,30 @@ void App_Task_Scheduler(void)
         g_lastRun[TASK_500MS] += g_period[TASK_500MS];
     }
 
-    /* ---- 1000ms: reserved ---- */
+    /* ---- 1000ms: battery ADC + ORE monitor ---- */
     if (now - g_lastRun[TASK_1000MS] >= g_period[TASK_1000MS])
     {
         g_lastRun[TASK_1000MS] += g_period[TASK_1000MS];
+
+        /* Battery voltage read (blocking ~10us, 1Hz — negligible) */
+        {
+            float batMv = BSP_ADC_GetBatteryVoltage();
+            DBG_PRINT("[BAT] %.1fV %d%%\n",
+                      (double)(batMv * 0.001f),
+                      BSP_ADC_GetBatteryPercent());
+        }
+
+        /* USART overrun watchdog: warn if bytes were lost since last check */
+        {
+            static uint32_t g_lastOre = 0;
+            uint32_t ore = BSP_USART_GetOreCount();
+            if (ore != g_lastOre)
+            {
+                DBG_PRINT("[WARN] USART ORE: %lu overruns\n",
+                          (unsigned long)(ore - g_lastOre));
+                g_lastOre = ore;
+            }
+        }
     }
 }
 

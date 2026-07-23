@@ -1,4 +1,5 @@
 #include "app_navigation.h"
+#include "algorithm/algo_filter.h"
 #include <string.h>
 
 static NavWaypoint_t g_home;
@@ -55,22 +56,7 @@ float App_Nav_GetHeadingToTarget(float curLat, float curLng)
     x = fast_cos(curLat * rad) * fast_sin(g_dest.lat * rad)
       - fast_sin(curLat * rad) * fast_cos(g_dest.lat * rad) * fast_cos(dLng);
 
-    /* atan2 approximation inline */
-    {
-        float abs_y = (y < 0.0f) ? -y : y;
-        float r;
-        if (x >= 0.0f)
-        {
-            r = (x - abs_y) / (x + abs_y + 0.000001f);
-            heading = (0.1963f * r * r * r - 0.9817f * r + 0.78539816f) * toRad;
-        }
-        else
-        {
-            r = (x + abs_y) / (abs_y - x + 0.000001f);
-            heading = (0.1963f * r * r * r - 0.9817f * r + 2.35619449f) * toRad;
-        }
-        if (y < 0.0f) heading = -heading;
-    }
+    heading = fast_atan2(y, x) * toRad;
 
     if (heading < 0.0f) heading += 360.0f;
     return heading;

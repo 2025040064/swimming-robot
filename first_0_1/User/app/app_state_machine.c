@@ -4,6 +4,7 @@
 #include "bsp_ultrasonic.h"
 #include "bsp_led.h"
 #include "bsp_systick.h"
+#include "algorithm/algo_filter.h"
 
 static RobotState_t g_state = STATE_INIT;
 static uint32_t g_stateEnterTick = 0;
@@ -24,6 +25,7 @@ void App_SM_Init(void)
     g_stateEnterTick = BSP_GetTick();
     g_stateTimeout = 3000;
     g_avoidDir = 0;
+    Algo_Filter_StartCalibration();  /* start gyro bias collection */
 }
 
 void App_SM_SetState(RobotState_t newState, uint32_t timeoutMs)
@@ -51,6 +53,7 @@ void App_SM_Run(void)
         BSP_LED_On();
         if (SM_Timeout())
         {
+            Algo_Filter_FinishCalibration();  /* compute gyro offsets */
             App_SM_SetState(STATE_SEARCH, 0);
             BSP_LED_Off();
         }
@@ -91,7 +94,25 @@ void App_SM_Run(void)
         }
         else if (g_state == STATE_SEARCH)
         {
-            App_Ctrl_SearchCruise();
+            /*
+             * Before executing cruise turn, check the corresponding
+             * side ultrasonic. If blocked, override with straight-line
+             * to avoid turning into a wall.
+             */
+            uint8_t phase = App_Ctrl_GetCruisePhase();
+
+            if (phase == 1 && BSP_Ultrasonic_GetRight() < 60.0f)
+            {
+                App_Ctrl_UpdateMotors(CRUISE_SPEED, CRUISE_SPEED);
+            }
+            else if (phase == 3 && BSP_Ultrasonic_GetLeft() < 60.0f)
+            {
+                App_Ctrl_UpdateMotors(CRUISE_SPEED, CRUISE_SPEED);
+            }
+            else
+            {
+                App_Ctrl_SearchCruise();
+            }
         }
         break;
 

@@ -125,7 +125,8 @@ static void Ultrasonic_Tick(US_Sensor_t *s)
     case US_PHASE_MEASURE_ECHO:
         if (GPIO_ReadInputDataBit(s->echoPort, s->echoPin) == 0)
         {
-            float dist = (BSP_GetTick() - s->echoStartTick) * 0.017f * 100.0f;
+            /* time(ms) × 17.0 → cm  (sound 340m/s, round-trip) */
+            float dist = (BSP_GetTick() - s->echoStartTick) * 17.0f;
             if (dist < 2.0f)   dist = 2.0f;
             if (dist > 400.0f) dist = 400.0f;
             s->rawDistance = dist;

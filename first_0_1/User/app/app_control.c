@@ -13,13 +13,16 @@
 #include "algorithm/algo_filter.h"
 #include "bsp_systick.h"
 
+#define TARGET_TIMEOUT_MS   500   /* 500ms without update → target lost */
+
 static PID_t g_pidX;
 static PID_t g_pidY;
 static int16_t g_targetX = 0;
 static int16_t g_targetY = 0;
-static uint8_t g_targetValid = 0;
-static uint32_t g_cruisePhase = 0;
-static uint32_t g_lastCruiseTick = 0;
+static uint8_t  g_targetValid     = 0;
+static uint32_t g_targetTimestamp = 0;
+static uint32_t g_cruisePhase     = 0;
+static uint32_t g_lastCruiseTick  = 0;
 
 /* Ramp state: current vs target for left/right motors */
 static int16_t g_rampLeft  = 0;
@@ -27,8 +30,8 @@ static int16_t g_rampRight = 0;
 
 void App_Ctrl_Init(void)
 {
-    Algo_PID_Init(&g_pidX, 18.0f, 0.2f, 2.0f, -4000.0f, 4000.0f);
-    Algo_PID_Init(&g_pidY, 6.0f, 0.05f, 0.5f, -2000.0f, 2000.0f);
+    Algo_PID_Init(&g_pidX, 18.0f, 0.2f, 2.0f, 4000.0f, -4000.0f, 4000.0f);
+    Algo_PID_Init(&g_pidY,  6.0f, 0.05f, 0.5f, 2000.0f, -2000.0f, 2000.0f);
     g_targetX = 0;
     g_targetY = 0;
     g_targetValid = 0;
@@ -42,7 +45,8 @@ void App_Ctrl_SetTarget(int16_t x, int16_t y)
 {
     g_targetX = x;
     g_targetY = y;
-    g_targetValid = 1;
+    g_targetValid     = 1;
+    g_targetTimestamp = BSP_GetTick();
 }
 
 /* ---- Ramped motor update: smooth transition to target speed ---- */
@@ -93,10 +97,23 @@ void App_Ctrl_SearchCruise(void)
 
 void App_Ctrl_ApproachTarget(void)
 {
-    float dt = 0.02f;
-    float pidX, pidY;
+    static uint32_t g_lastPidTick = 0;
+    uint32_t now = BSP_GetTick();
+    float dt, pidX, pidY;
     float errorX, errorY;
     int16_t left, right;
+
+    /* Actual dt since last call — capped for safety */
+    dt = (float)(now - g_lastPidTick) * 0.001f;
+    if (dt < 0.001f) dt = 0.001f;
+    if (dt > 0.1f)   dt = 0.1f;
+    g_lastPidTick = now;
+
+    /* Target age timeout: if no update from K230 for >500ms, coast */
+    if (g_targetValid && (now - g_targetTimestamp) > TARGET_TIMEOUT_MS)
+    {
+        g_targetValid = 0;
+    }
 
     if (!g_targetValid)
     {
@@ -170,6 +187,11 @@ void App_Ctrl_ReturnBase(void)
 {
     /* Reserved: will use GPS + compass to navigate home */
     DRV_TB6612_StopAll();
+}
+
+uint8_t App_Ctrl_GetCruisePhase(void)
+{
+    return (uint8_t)(g_cruisePhase & 0x03);
 }
 
 void App_Ctrl_OnStateChange(uint8_t newState)

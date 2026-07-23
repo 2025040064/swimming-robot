@@ -14,9 +14,12 @@ typedef struct
     float integralMax;
     float outputMin;
     float outputMax;
+    float prevDerivative;   /* for derivative low-pass filter */
+    float derivAlpha;       /* 0~1, smaller = stronger filtering (default 0.1) */
 } PID_t;
 
-void Algo_PID_Init(PID_t *pid, float kp, float ki, float kd, float outMin, float outMax);
+void Algo_PID_Init(PID_t *pid, float kp, float ki, float kd,
+                   float integralMax, float outMin, float outMax);
 float Algo_PID_Compute(PID_t *pid, float input, float dt);
 void Algo_PID_Reset(PID_t *pid);
 void Algo_PID_SetSetpoint(PID_t *pid, float setpoint);

@@ -41,10 +41,13 @@ void BSP_USART_Init(uint32_t baudrate)
     USART_Cmd(K230_USART, ENABLE);
 }
 
+#define USART_TX_TIMEOUT    100000U   /* ~1.4ms at 72MHz — fail-safe against TX pin stuck low */
+
 void BSP_USART_SendByte(uint8_t ch)
 {
+    uint32_t timeout = USART_TX_TIMEOUT;
     USART_SendData(K230_USART, ch);
-    while (USART_GetFlagStatus(K230_USART, USART_FLAG_TXE) == RESET);
+    while (USART_GetFlagStatus(K230_USART, USART_FLAG_TXE) == RESET && --timeout);
 }
 
 void BSP_USART_SendString(char *str)
@@ -101,8 +104,10 @@ uint8_t BSP_USART_RxAvailable(void)
 
 void BSP_USART_ClearRx(void)
 {
+    __disable_irq();
     g_rxHead = 0;
     g_rxTail = 0;
+    __enable_irq();
 }
 
 uint32_t BSP_USART_GetOreCount(void)

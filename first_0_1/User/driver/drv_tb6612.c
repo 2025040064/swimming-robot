@@ -35,8 +35,8 @@ void DRV_TB6612_Init(void)
     GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
     GPIO_Init(GPIOA, &GPIO_InitStructure);
 
-    /* TIM2: 10kHz PWM, period=7200 */
-    TIM_TimeBaseStructure.TIM_Prescaler         = 71;
+    /* TIM2: 10kHz PWM = 72MHz / (0+1) / (7199+1) = 10kHz */
+    TIM_TimeBaseStructure.TIM_Prescaler         = 0;
     TIM_TimeBaseStructure.TIM_Period            = TB_PWM_PERIOD;
     TIM_TimeBaseStructure.TIM_ClockDivision     = TIM_CKD_DIV1;
     TIM_TimeBaseStructure.TIM_CounterMode       = TIM_CounterMode_Up;

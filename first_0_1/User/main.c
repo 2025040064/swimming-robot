@@ -7,6 +7,7 @@
 #include "bsp/bsp_mpu6050.h"
 #include "bsp/bsp_ultrasonic.h"
 #include "bsp/bsp_debug.h"
+#include "bsp/bsp_adc.h"
 #include "driver/drv_tb6612.h"
 #include "algorithm/algo_filter.h"
 #include "algorithm/algo_pid.h"
@@ -48,6 +49,7 @@ int main(void)
     BSP_USART_Init(115200);
     BSP_Ultrasonic_Init();
     BSP_MPU6050_Init();
+    BSP_ADC_Init();
     DRV_TB6612_Init();
 
     Algo_Filter_Init();
@@ -57,13 +59,29 @@ int main(void)
     App_Nav_Init();
     App_Task_Init();
 
+    /* ---- WHO_AM_I check ---- */
+    {
+        uint8_t whoami = BSP_MPU6050_Test();
+        if (whoami != 0x68)
+        {
+            /* MPU6050 not responding — fast-blink forever */
+            while (1)
+            {
+                BSP_LED_Toggle();
+                Delay_ms(200);
+            }
+        }
+    }
+
     BSP_USART_SendString("ROBOT_READY\n");
-    DBG_PRINT("Boot OK, IWDG=%ums\n", IWDG_TIMEOUT_MS);
+    DBG_PRINT("Boot OK, IWDG=%ums, MPU6050=0x%02X\n", IWDG_TIMEOUT_MS,
+              BSP_MPU6050_Test());
 
     while (1)
     {
         App_Task_Scheduler();
         IWDG_Feed();
+        __WFI();  /* sleep until next interrupt, saves battery */
     }
 }
 
