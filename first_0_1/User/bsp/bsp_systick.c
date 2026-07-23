@@ -13,12 +13,6 @@ uint32_t BSP_GetTick(void)
     return g_sysTick;
 }
 
-void BSP_DelayMs(uint32_t ms)
-{
-    uint32_t tickStart = g_sysTick;
-    while ((g_sysTick - tickStart) < ms);
-}
-
 void BSP_SysTick_Handler(void)
 {
     g_sysTick++;
