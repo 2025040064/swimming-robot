@@ -754,6 +754,11 @@
               <FileType>5</FileType>
               <FilePath>.\User\bsp\bsp_ultrasonic.h</FilePath>
             </File>
+            <File>
+              <FileName>bsp_adc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\bsp\bsp_adc.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -860,5 +865,14 @@
     <components/>
     <files/>
   </RTE>
+
+  <LayerInfo>
+    <Layers>
+      <Layer>
+        <LayName>first_0_1</LayName>
+        <LayPrjMark>1</LayPrjMark>
+      </Layer>
+    </Layers>
+  </LayerInfo>
 
 </Project>

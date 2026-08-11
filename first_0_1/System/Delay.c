@@ -1,6 +1,26 @@
 #include "Delay.h"
 #include "stm32f10x.h"
 
+/* ----- DWT register definitions (not in this CMSIS version) ----- */
+#define DWT_BASE                (0xE0001000UL)
+
+typedef struct
+{
+    __IO uint32_t CTRL;             /* Offset: 0x000 */
+    __IO uint32_t CYCCNT;           /* Offset: 0x004 */
+    __IO uint32_t CPICNT;           /* Offset: 0x008 */
+    __IO uint32_t EXCCNT;           /* Offset: 0x00C */
+    __IO uint32_t SLEEPCNT;         /* Offset: 0x010 */
+    __IO uint32_t LSUCNT;           /* Offset: 0x014 */
+    __IO uint32_t FOLDCNT;          /* Offset: 0x018 */
+    __I  uint32_t PCSR;             /* Offset: 0x01C */
+} DWT_Type;
+
+#define DWT                     ((DWT_Type *) DWT_BASE)
+
+#define DWT_CTRL_CYCCNTENA_Pos      (0U)
+#define DWT_CTRL_CYCCNTENA_Msk      (1UL << DWT_CTRL_CYCCNTENA_Pos)
+
 /**
   * @brief  DWT (Data Watchpoint and Trace) 初始化
   * @note   使能 DWT 周期计数器，用于微秒级精确定时。
