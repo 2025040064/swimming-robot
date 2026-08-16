@@ -4,9 +4,10 @@
 #include "stm32f10x.h"
 #include "algorithm/algo_pid.h"
 
-/* K230 image center reference */
-#define IMG_CENTER_X    0
-#define IMG_CENTER_Y    0
+/* K230 image center reference (640x640 frame -> center = 320,320) */
+#define IMG_CENTER_X    320
+#define IMG_CENTER_Y    320
+//输入输出均为640（640*640）
 
 /* Deadband: target within +/-20 pixels = straight-ahead, no PID correction */
 #define IMG_DEADBAND    20  //死区 （变大减少微调抖动）

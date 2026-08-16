@@ -16,7 +16,6 @@
 #define TARGET_TIMEOUT_MS   500   /* 500ms without update → target lost */
 
 static PID_t g_pidX;
-static PID_t g_pidY;
 static int16_t g_targetX = 0;
 static int16_t g_targetY = 0;
 static uint8_t  g_targetValid     = 0;
@@ -30,8 +29,10 @@ static int16_t g_rampRight = 0;
 
 void App_Ctrl_Init(void)
 {
-    Algo_PID_Init(&g_pidX, 18.0f, 0.2f, 2.0f, 4000.0f, -4000.0f, 4000.0f);
-    Algo_PID_Init(&g_pidY,  6.0f, 0.05f, 0.5f, 2000.0f, -2000.0f, 2000.0f);
+    /* Yaw-only PID. kp=10 -> max P = 10*320 = 3200 < 4000 clamp, so steering
+     * stays proportional across the full 0~320px error instead of saturating
+     * to bang-bang (kp=18 saturated at ~222px). */
+    Algo_PID_Init(&g_pidX, 10.0f, 0.2f, 2.0f, 4000.0f, -4000.0f, 4000.0f);
     g_targetX = 0;
     g_targetY = 0;
     g_targetValid = 0;
@@ -44,7 +45,7 @@ void App_Ctrl_Init(void)
 void App_Ctrl_SetTarget(int16_t x, int16_t y)
 {
     g_targetX = x;
-    g_targetY = y;
+    g_targetY = y;   /* retained for future distance control; not used for steering */
     g_targetValid     = 1;
     g_targetTimestamp = BSP_GetTick();
 }
@@ -99,8 +100,8 @@ void App_Ctrl_ApproachTarget(void)
 {
     static uint32_t g_lastPidTick = 0;
     uint32_t now = BSP_GetTick();
-    float dt, pidX, pidY;
-    float errorX, errorY;
+    float dt, pidX;
+    float errorX;
     int16_t left, right;
 
     /* Actual dt since last call — capped for safety */
@@ -121,28 +122,23 @@ void App_Ctrl_ApproachTarget(void)
         return;
     }
 
-    /* Deadband check: if target is near center, go straight */
+    /* Deadband: target horizontally centered -> straight ahead. Only x is a
+     * steering (yaw) error for a differential surface robot. */
     errorX = IMG_CENTER_X - (float)g_targetX;
-    errorY = IMG_CENTER_Y - (float)g_targetY;
-
     if (errorX < 0.0f) errorX = -errorX;
-    if (errorY < 0.0f) errorY = -errorY;
 
-    if (errorX < (float)IMG_DEADBAND && errorY < (float)IMG_DEADBAND)
+    if (errorX < (float)IMG_DEADBAND)
     {
         App_Ctrl_UpdateMotors(APPROACH_SPEED, APPROACH_SPEED);
         return;
     }
 
-    /* PID correction when target is outside deadband */
+    /* Yaw-only PID. Vertical (y) offset is distance/pitch, not a steering error. */
     Algo_PID_SetSetpoint(&g_pidX, IMG_CENTER_X);
-    Algo_PID_SetSetpoint(&g_pidY, IMG_CENTER_Y);
-
     pidX = Algo_PID_Compute(&g_pidX, (float)g_targetX, dt);
-    pidY = Algo_PID_Compute(&g_pidY, (float)g_targetY, dt);
 
-    left  = APPROACH_SPEED + (int16_t)pidX - (int16_t)pidY;
-    right = APPROACH_SPEED - (int16_t)pidX + (int16_t)pidY;
+    left  = APPROACH_SPEED - (int16_t)pidX;
+    right = APPROACH_SPEED + (int16_t)pidX;
 
     if (left  > 7200) left  = 7200;
     if (left  < -7200) left  = -7200;
@@ -197,7 +193,6 @@ uint8_t App_Ctrl_GetCruisePhase(void)
 void App_Ctrl_OnStateChange(uint8_t newState)
 {
     Algo_PID_Reset(&g_pidX);
-    Algo_PID_Reset(&g_pidY);
     g_targetValid = 0;
     g_rampLeft  = 0;
     g_rampRight = 0;
