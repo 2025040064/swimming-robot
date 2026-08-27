@@ -1,18 +1,39 @@
-#编译中间文件
+# ===== Keil 工程文件（取消跟踪，不随仓库上传）=====
+*.uvprojx
+*.uvoptx
+*.uvopt
+*.uvguix*
+*.uvgui*
+*.dbgconf*
+
+# ===== 编译中间文件 =====
 *.o
+*.obj
 *.d
 *.crf
 *.dep
 *.i
 *.ii
-#固件输出文件
+*.__i
+*.lnp
+*.plg
+*.ddk
+*.edk
+*.mpf
+*.mpj
+*.omf
+*.rpt
+*.tra
+
+# ===== 固件输出文件 =====
 *.axf
 *.elf
 *.hex
 *.bin
 *.lib
 *.a
-#列表与输出文件
+
+# ===== 列表与输出文件 =====
 *.lst
 *.map
 *.htm
@@ -20,23 +41,32 @@
 *.scf
 *.m51
 *.h51
-#keil个人配置与临时文件
-*.uvguix
-*.uvgui
-*.uvoptx
-*.uvopt
+*.iex
+
+# ===== Keil 个人配置与临时文件 =====
 *.Tralog
 *.bulid_log.htm
 *.dep_log
 *.log
-#调试器相关文件
+
+# ===== Keil 自动生成目录 =====
+Objects/
+Listings/
+RTE/
+DebugConfig/
+
+# ===== Keil 清理脚本 =====
+keilkill.bat
+
+# ===== 调试器相关文件 =====
 *.jlink
 *.JLinkSettings
 *.stlink
-*.dbgconf
 *.ini
 *.dni
-#通用临时/系统文件
+JLinkLog.txt
+
+# ===== 通用临时/系统文件 =====
 *.tmp
 *.bak
 *.swp
@@ -44,8 +74,9 @@
 *.DS_Store
 Thumbs.db
 desktop.ini
-#嵌套GIT目录
+
+# ===== 嵌套 Git 目录 =====
 /git/
-Objects/
-Listings/
-.Vscode/  
+
+# ===== VS Code 本地配置 =====
+.vscode/
