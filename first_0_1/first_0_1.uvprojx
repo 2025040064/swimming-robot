@@ -759,6 +759,21 @@
               <FileType>1</FileType>
               <FilePath>.\User\bsp\bsp_adc.c</FilePath>
             </File>
+            <File>
+              <FileName>bsp_adc.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\User\bsp\bsp_adc.h</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_debug.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\bsp\bsp_debug.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_debug.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\User\bsp\bsp_debug.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

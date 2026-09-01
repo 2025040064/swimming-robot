@@ -1,4 +1,5 @@
 #include "stm32f10x.h"
+#include "stm32f10x_it.h"
 #include "system_stm32f10x.h"
 #include "bsp/bsp_systick.h"
 #include "bsp/bsp_led.h"
@@ -47,6 +48,7 @@ int main(void)
     BSP_SysTick_Init();
     BSP_LED_Init();
     BSP_USART_Init(115200);
+    Crash_ReportAndClear();   /* report any previous fault, then clear signature */
     BSP_Ultrasonic_Init();
     BSP_MPU6050_Init();
     BSP_ADC_Init();

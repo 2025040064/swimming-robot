@@ -75,6 +75,7 @@ void Algo_Filter_Update(int16_t *accel, int16_t *gyro, float dt)
 {
     float ax, ay, az, gx, gy, gz;
     float accelPitch, accelRoll;
+    float alpha;
 
     /* During calibration: accumulate raw gyro, skip filter */
     if (g_calibrating)
@@ -100,9 +101,11 @@ void Algo_Filter_Update(int16_t *accel, int16_t *gyro, float dt)
     accelPitch = fast_atan2(ay, fast_sqrt(ax * ax + az * az)) * 57.29578f;
     accelRoll  = fast_atan2(-ax, az) * 57.29578f;
 
-    /* Complementary filter: α=0.96 gyro + 0.04 accel */
-    g_att.pitch = 0.96f * (g_att.pitch + gx * dt) + 0.04f * accelPitch;
-    g_att.roll  = 0.96f * (g_att.roll  + gy * dt) + 0.04f * accelRoll;
+    /* Complementary filter with a dt-dependent coefficient (see header).
+     * alpha = tau/(tau+dt); gyro integrates, accel corrects the drift. */
+    alpha = FILTER_TAU / (FILTER_TAU + dt);
+    g_att.pitch = alpha * (g_att.pitch + gx * dt) + (1.0f - alpha) * accelPitch;
+    g_att.roll  = alpha * (g_att.roll  + gy * dt) + (1.0f - alpha) * accelRoll;
 
     g_att.pitchAccel = accelPitch;
     g_att.rollAccel  = accelRoll;

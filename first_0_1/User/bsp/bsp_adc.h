@@ -1,7 +1,7 @@
 /**
- * Battery voltage monitoring via ADC1 on PA8.
+ * Battery voltage monitoring via ADC1 — DISABLED (needs hardware rework).
  *
- * Hardware: voltage divider R1=10k (top), R2=4.7k (bottom)
+ * Original hardware: voltage divider R1=10k (top), R2=4.7k (bottom)
  *   V_adc = V_bat * R2 / (R1 + R2)
  *   V_bat = V_adc * (R1 + R2) / R2
  *
@@ -9,7 +9,9 @@
  *   - Full (8.4V) → ADC pin 2.69V → 3331 counts
  *   - Empty (6.0V) → ADC pin 1.92V → 2380 counts
  *
- * Resolution: ~2.5mV per LSB at battery level
+ * The functions below are currently no-ops returning safe sentinels:
+ * PA8 (the original pin) is NOT ADC-capable on STM32F103C8T6, and every
+ * real ADC pin is already in use. See bsp_adc.c for the rework steps.
  */
 
 #ifndef __BSP_ADC_H

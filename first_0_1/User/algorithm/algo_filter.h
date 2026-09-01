@@ -3,7 +3,12 @@
 
 #include "stm32f10x.h"
 
-#define FILTER_ALPHA    0.96f
+/* Complementary filter cutoff frequency (Hz). The blend coefficient is
+ * computed per-sample from dt: alpha = tau / (tau + dt), tau = 1/(2*pi*fc).
+ * A fixed alpha is wrong because the actual dt varies with sampling jitter. */
+#define FILTER_CUTOFF_HZ   0.5f
+#define FILTER_TAU         (1.0f / (2.0f * 3.14159265f * FILTER_CUTOFF_HZ))
+
 #define GYRO_GAIN       0.060975f
 #define RAD_TO_DEG      57.29578f
 

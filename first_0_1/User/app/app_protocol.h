@@ -5,6 +5,10 @@
 
 #define PROTO_BUF_SIZE   64
 
+/* K230 sends a 640x640 frame; valid target coordinates are [0,639] on both axes. */
+#define PROTO_IMG_MAX_X  639
+#define PROTO_IMG_MAX_Y  639
+
 typedef enum
 {
     PKT_TRASH = 0,

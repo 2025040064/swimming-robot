@@ -19,4 +19,7 @@ void MemManage_Handler_C(uint32_t *stack);
 void BusFault_Handler_C(uint32_t *stack);
 void UsageFault_Handler_C(uint32_t *stack);
 
+/* Boot-time crash report: prints saved SP/LR/PC and clears the signature */
+void Crash_ReportAndClear(void);
+
 #endif

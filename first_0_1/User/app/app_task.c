@@ -100,13 +100,8 @@ void App_Task_Scheduler(void)
     {
         g_lastRun[TASK_1000MS] += g_period[TASK_1000MS];
 
-        /* Battery voltage read (blocking ~10us, 1Hz — negligible) */
-        {
-            float batMv = BSP_ADC_GetBatteryVoltage();
-            DBG_PRINT("[BAT] %.1fV %d%%\n",
-                      (double)(batMv * 0.001f),
-                      BSP_ADC_GetBatteryPercent());
-        }
+        /* Battery ADC is disabled (PA8 was not a valid ADC pin; see bsp_adc.c).
+         * No battery read here until the hardware is rewired to a real ADC pin. */
 
         /* USART overrun watchdog: warn if bytes were lost since last check */
         {

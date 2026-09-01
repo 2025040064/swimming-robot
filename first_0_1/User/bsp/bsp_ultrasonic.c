@@ -1,30 +1,26 @@
 /**
- * Non-blocking ultrasonic driver for 3x AJ-SRP04M sensors.
+ * Ultrasonic driver for 3x AJ-SRP04M sensors, using microsecond-level timing.
  *
- * Each sensor cycles through a 4-phase state machine:
- *   IDLE -> TRIG_PULSE -> WAIT_ECHO_HIGH -> MEASURE_ECHO -> DONE
- * One phase advances per BSP_Ultrasonic_Update() call (~10ms),
- * so a full 3-sensor sweep takes ~12 calls = 120ms, without
- * ever blocking the scheduler.
+ * Timing: TIM3 runs as a free-running 1MHz (1 us/tick) counter. The Echo pins
+ * (PA7/EXTI7, PB6/EXTI6, PB8/EXTI8) trigger EXTI interrupts on BOTH edges:
+ *   - rising edge  -> record TIM3->CNT as the echo start
+ *   - falling edge -> delta_us * 0.017 = distance in cm
  *
- * A first-order low-pass filter smooths measurements to reject
- * single-sample outliers caused by wave reflections.
+ * A round-robin scheduler fires one sensor at a time (one Trig pulse per
+ * ~60 ms) so the three sensors never echo over each other. Each sensor has a
+ * 30 ms timeout: if no echo arrives, it is marked invalid and reads 999.0 cm.
+ *
+ * A reading is "valid" only if the last echo succeeded AND it is not stale
+ * (see BSP_Ultrasonic_IsValid). 999.0 cm is "no echo", not "clear ahead".
  */
 
 #include "bsp_ultrasonic.h"
 #include "bsp_systick.h"
 
-#define US_TIMEOUT_MS   60
-
-/* --- Non-blocking state machine --- */
-typedef enum
-{
-    US_PHASE_IDLE = 0,
-    US_PHASE_TRIG_PULSE,
-    US_PHASE_WAIT_ECHO_HIGH,
-    US_PHASE_MEASURE_ECHO,
-    US_PHASE_DONE
-} US_Phase_t;
+/* TIM3 as the microsecond timebase (72 MHz / (71+1) = 1 MHz). */
+#define US_TIM          TIM3
+#define US_TIM_CLK      RCC_APB1Periph_TIM3
+#define US_TIM_PSC      71
 
 typedef struct
 {
@@ -32,24 +28,84 @@ typedef struct
     uint16_t      trigPin;
     GPIO_TypeDef *echoPort;
     uint16_t      echoPin;
-    US_Phase_t    phase;
-    uint32_t      echoStartTick;
-    uint32_t      timeoutTick;
-    float         rawDistance;
+
+    volatile uint8_t  measuring;       /* 1 = waiting for this sensor's echo */
+    volatile uint8_t  echoHigh;        /* 1 = echo currently high (measuring pulse) */
+    volatile uint16_t echoStartUs;     /* TIM3->CNT at the rising edge */
+    volatile uint32_t trigTick;        /* BSP_GetTick() when Trig was pulsed */
+    volatile uint32_t lastUpdateTick;  /* BSP_GetTick() at last successful echo */
+
+    volatile float    distance;        /* cm */
+    volatile uint8_t  valid;           /* 1 = last echo succeeded */
 } US_Sensor_t;
 
 static US_Sensor_t g_sensors[3];
-static uint8_t     g_sensorIdx = 0;     /* round-robin: 0=front, 1=left, 2=right */
+static volatile uint8_t  g_sensorIdx = 0;
+static volatile uint32_t g_nextTrigTick = 0;
 
-static float g_frontDist = 999.0f;
-static float g_leftDist  = 999.0f;
-static float g_rightDist = 999.0f;
+/* ---- microsecond busy delay based on the TIM3 free-running counter ---- */
+static void delay_us(uint16_t us)
+{
+    uint16_t start = US_TIM->CNT;
+    while ((uint16_t)(US_TIM->CNT - start) < us) { }
+}
 
-/* ---- Initialize hardware GPIOs ---- */
+/* ---- 10 us Trigger pulse ---- */
+static void TriggerPulse(US_Sensor_t *s)
+{
+    GPIO_ResetBits(s->trigPort, s->trigPin);
+    delay_us(2);
+    GPIO_SetBits(s->trigPort, s->trigPin);
+    delay_us(10);
+    GPIO_ResetBits(s->trigPort, s->trigPin);
+}
+
+/* ---- Start a measurement on one sensor ---- */
+static void Ultrasonic_Trigger(US_Sensor_t *s, uint32_t now)
+{
+    s->measuring = 1;
+    s->echoHigh  = 0;
+    s->trigTick  = now;
+    /* keep the previous distance/valid until a new echo or a timeout */
+    TriggerPulse(s);
+}
+
+/* ---- Process one Echo edge (called from EXTI9_5_IRQHandler) ---- */
+static void US_CaptureEdge(US_Sensor_t *s, uint32_t now)
+{
+    uint8_t level = GPIO_ReadInputDataBit(s->echoPort, s->echoPin);
+
+    if (level)   /* rising edge: start the pulse width measurement */
+    {
+        s->echoStartUs = US_TIM->CNT;
+        s->echoHigh = 1;
+    }
+    else if (s->echoHigh)   /* falling edge after a rising edge: pulse done */
+    {
+        uint16_t elapsed = (uint16_t)(US_TIM->CNT - s->echoStartUs);
+        float d = (float)elapsed * 0.017f;   /* cm (340 m/s, round trip) */
+
+        if (d < US_MIN_DIST_CM) d = US_MIN_DIST_CM;
+        if (d > US_MAX_DIST_CM) d = US_MAX_DIST_CM;
+
+        s->distance       = d;
+        s->valid          = 1;
+        s->lastUpdateTick = now;
+        s->measuring      = 0;
+        s->echoHigh       = 0;
+    }
+}
+
+/* ---- Initialize hardware GPIOs, TIM3 timebase and EXTI ---- */
 void BSP_Ultrasonic_Init(void)
 {
     GPIO_InitTypeDef GPIO_InitStructure;
+    TIM_TimeBaseInitTypeDef TIM_TimeBaseStructure;
+    EXTI_InitTypeDef EXTI_InitStructure;
+    NVIC_InitTypeDef NVIC_InitStructure;
+
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOB | RCC_APB2Periph_AFIO, ENABLE);
+    RCC_APB1PeriphClockCmd(US_TIM_CLK, ENABLE);
 
     /* Trig pins: Out_PP, low */
     GPIO_InitStructure.GPIO_Pin   = US_F_TRIG_PIN;
@@ -71,130 +127,122 @@ void BSP_Ultrasonic_Init(void)
     GPIO_InitStructure.GPIO_Pin   = US_L_ECHO_PIN | US_R_ECHO_PIN;
     GPIO_Init(US_L_ECHO_PORT, &GPIO_InitStructure);
 
+    /* TIM3: 1MHz free-running counter (no interrupt, no output). */
+    TIM_TimeBaseStructure.TIM_Prescaler     = US_TIM_PSC;
+    TIM_TimeBaseStructure.TIM_Period        = 0xFFFF;
+    TIM_TimeBaseStructure.TIM_ClockDivision = TIM_CKD_DIV1;
+    TIM_TimeBaseStructure.TIM_CounterMode   = TIM_CounterMode_Up;
+    TIM_TimeBaseInit(US_TIM, &TIM_TimeBaseStructure);
+    TIM_Cmd(US_TIM, ENABLE);
+
+    /* Map echo pins to EXTI lines, trigger on both edges. */
+    GPIO_EXTILineConfig(GPIO_PortSourceGPIOA, GPIO_PinSource7);   /* front PA7 */
+    GPIO_EXTILineConfig(GPIO_PortSourceGPIOB, GPIO_PinSource6);   /* left  PB6 */
+    GPIO_EXTILineConfig(GPIO_PortSourceGPIOB, GPIO_PinSource8);   /* right PB8 */
+
+    EXTI_InitStructure.EXTI_Line    = EXTI_Line6 | EXTI_Line7 | EXTI_Line8;
+    EXTI_InitStructure.EXTI_Mode    = EXTI_Mode_Interrupt;
+    EXTI_InitStructure.EXTI_Trigger = EXTI_Trigger_Rising_Falling;
+    EXTI_InitStructure.EXTI_LineCmd = ENABLE;
+    EXTI_Init(&EXTI_InitStructure);
+
+    NVIC_InitStructure.NVIC_IRQChannel                   = EXTI9_5_IRQn;
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 2;
+    NVIC_InitStructure.NVIC_IRQChannelSubPriority        = 0;
+    NVIC_InitStructure.NVIC_IRQChannelCmd                = ENABLE;
+    NVIC_Init(&NVIC_InitStructure);
+
     /* Init sensor control blocks */
-    g_sensors[0].trigPort = US_F_TRIG_PORT; g_sensors[0].trigPin  = US_F_TRIG_PIN;
-    g_sensors[0].echoPort = US_F_ECHO_PORT; g_sensors[0].echoPin  = US_F_ECHO_PIN;
-    g_sensors[0].phase    = US_PHASE_IDLE;
+    g_sensors[0].trigPort = US_F_TRIG_PORT; g_sensors[0].trigPin = US_F_TRIG_PIN;
+    g_sensors[0].echoPort = US_F_ECHO_PORT; g_sensors[0].echoPin = US_F_ECHO_PIN;
+    g_sensors[0].distance = US_NO_ECHO;
 
-    g_sensors[1].trigPort = US_L_TRIG_PORT; g_sensors[1].trigPin  = US_L_TRIG_PIN;
-    g_sensors[1].echoPort = US_L_ECHO_PORT; g_sensors[1].echoPin  = US_L_ECHO_PIN;
-    g_sensors[1].phase    = US_PHASE_IDLE;
+    g_sensors[1].trigPort = US_L_TRIG_PORT; g_sensors[1].trigPin = US_L_TRIG_PIN;
+    g_sensors[1].echoPort = US_L_ECHO_PORT; g_sensors[1].echoPin = US_L_ECHO_PIN;
+    g_sensors[1].distance = US_NO_ECHO;
 
-    g_sensors[2].trigPort = US_R_TRIG_PORT; g_sensors[2].trigPin  = US_R_TRIG_PIN;
-    g_sensors[2].echoPort = US_R_ECHO_PORT; g_sensors[2].echoPin  = US_R_ECHO_PIN;
-    g_sensors[2].phase    = US_PHASE_IDLE;
+    g_sensors[2].trigPort = US_R_TRIG_PORT; g_sensors[2].trigPin = US_R_TRIG_PIN;
+    g_sensors[2].echoPort = US_R_ECHO_PORT; g_sensors[2].echoPin = US_R_ECHO_PIN;
+    g_sensors[2].distance = US_NO_ECHO;
 
-    g_sensorIdx = 0;
+    g_sensorIdx    = 0;
+    g_nextTrigTick = 0;
 }
 
-/* ---- Advance ONE sensor by one phase (non-blocking) ---- */
-static void Ultrasonic_Tick(US_Sensor_t *s)
-{
-    switch (s->phase)
-    {
-    case US_PHASE_IDLE:
-        /* Start a new measurement cycle */
-        s->phase = US_PHASE_TRIG_PULSE;
-        break;
-
-    case US_PHASE_TRIG_PULSE:
-        /* Send 10us trigger pulse */
-        GPIO_ResetBits(s->trigPort, s->trigPin);
-        for (volatile uint8_t i = 0; i < 5; i++) __NOP();
-        GPIO_SetBits(s->trigPort, s->trigPin);
-        for (volatile uint8_t i = 0; i < 20; i++) __NOP();
-        GPIO_ResetBits(s->trigPort, s->trigPin);
-        s->timeoutTick = BSP_GetTick() + US_TIMEOUT_MS;
-        s->phase = US_PHASE_WAIT_ECHO_HIGH;
-        break;
-
-    case US_PHASE_WAIT_ECHO_HIGH:
-        if (GPIO_ReadInputDataBit(s->echoPort, s->echoPin) == 1)
-        {
-            s->echoStartTick = BSP_GetTick();
-            s->timeoutTick   = s->echoStartTick + US_TIMEOUT_MS;
-            s->phase = US_PHASE_MEASURE_ECHO;
-        }
-        else if (BSP_GetTick() > s->timeoutTick)
-        {
-            s->rawDistance = 999.0f;
-            s->phase = US_PHASE_DONE;
-        }
-        break;
-
-    case US_PHASE_MEASURE_ECHO:
-        if (GPIO_ReadInputDataBit(s->echoPort, s->echoPin) == 0)
-        {
-            /* time(ms) × 17.0 → cm  (sound 340m/s, round-trip) */
-            float dist = (BSP_GetTick() - s->echoStartTick) * 17.0f;
-            if (dist < 2.0f)   dist = 2.0f;
-            if (dist > 400.0f) dist = 400.0f;
-            s->rawDistance = dist;
-            s->phase = US_PHASE_DONE;
-        }
-        else if (BSP_GetTick() > s->timeoutTick)
-        {
-            s->rawDistance = 999.0f;
-            s->phase = US_PHASE_DONE;
-        }
-        break;
-
-    case US_PHASE_DONE:
-        /* Will be re-triggered after all sensors finish */
-        break;
-    }
-}
-
-/* ---- First-order low-pass filter ---- */
-static float LowPass(float prev, float raw)
-{
-    return prev * (1.0f - US_FILTER_ALPHA) + raw * US_FILTER_ALPHA;
-}
-
-/* ---- Called at ~10ms from task scheduler ---- */
+/* ---- Called at ~10ms from the task scheduler ---- */
 void BSP_Ultrasonic_Update(void)
 {
-    static uint32_t g_lastUpdate = 0;
     uint32_t now = BSP_GetTick();
+    uint8_t i;
 
-    /* Throttle to ~10ms between ticks */
-    if (now - g_lastUpdate < 10) return;
-    g_lastUpdate = now;
-
-    /* Advance the currently selected sensor by one phase */
-    Ultrasonic_Tick(&g_sensors[g_sensorIdx]);
-
-    /* If this sensor is done, move to the next */
-    if (g_sensors[g_sensorIdx].phase == US_PHASE_DONE)
+    /* Timeout: invalidate any sensor whose echo never came (or never ended). */
+    for (i = 0; i < 3; i++)
     {
-        g_sensorIdx++;
+        US_Sensor_t *s = &g_sensors[i];
+        if (s->measuring && (now - s->trigTick) > US_ECHO_TIMEOUT_MS)
+        {
+            s->measuring = 0;
+            s->echoHigh  = 0;
+            s->valid     = 0;
+            s->distance  = US_NO_ECHO;
+        }
     }
 
-    /* All 3 sensors done? Apply low-pass filter and restart */
-    if (g_sensorIdx >= 3)
-    {
-        g_frontDist = LowPass(g_frontDist, g_sensors[0].rawDistance);
-        g_leftDist  = LowPass(g_leftDist,  g_sensors[1].rawDistance);
-        g_rightDist = LowPass(g_rightDist, g_sensors[2].rawDistance);
+    /* Round-robin: fire the next sensor every US_TRIG_INTERVAL_MS. */
+    if (now - g_nextTrigTick < US_TRIG_INTERVAL_MS)
+        return;
 
-        g_sensors[0].phase = US_PHASE_IDLE;
-        g_sensors[1].phase = US_PHASE_IDLE;
-        g_sensors[2].phase = US_PHASE_IDLE;
-        g_sensorIdx = 0;
+    g_nextTrigTick = now;
+    Ultrasonic_Trigger(&g_sensors[g_sensorIdx], now);
+
+    g_sensorIdx++;
+    if (g_sensorIdx >= 3) g_sensorIdx = 0;
+}
+
+/* ---- EXTI9_5 shared IRQ: PA7(EXTI7) / PB6(EXTI6) / PB8(EXTI8) ---- */
+void EXTI9_5_IRQHandler(void)
+{
+    uint32_t now = BSP_GetTick();
+
+    if (EXTI_GetITStatus(EXTI_Line7) != RESET)   /* front PA7 */
+    {
+        EXTI_ClearITPendingBit(EXTI_Line7);
+        US_CaptureEdge(&g_sensors[0], now);
+    }
+    if (EXTI_GetITStatus(EXTI_Line6) != RESET)   /* left PB6 */
+    {
+        EXTI_ClearITPendingBit(EXTI_Line6);
+        US_CaptureEdge(&g_sensors[1], now);
+    }
+    if (EXTI_GetITStatus(EXTI_Line8) != RESET)   /* right PB8 */
+    {
+        EXTI_ClearITPendingBit(EXTI_Line8);
+        US_CaptureEdge(&g_sensors[2], now);
     }
 }
 
 float BSP_Ultrasonic_GetDistance(uint8_t sensor)
 {
-    switch (sensor)
-    {
-    case US_FRONT: return g_frontDist;
-    case US_LEFT:  return g_leftDist;
-    case US_RIGHT: return g_rightDist;
-    default:       return 999.0f;
-    }
+    if (sensor < 3)
+        return g_sensors[sensor].distance;
+    return US_NO_ECHO;
 }
 
-float BSP_Ultrasonic_GetFront(void) { return g_frontDist; }
-float BSP_Ultrasonic_GetLeft(void)  { return g_leftDist; }
-float BSP_Ultrasonic_GetRight(void) { return g_rightDist; }
+float BSP_Ultrasonic_GetFront(void) { return g_sensors[0].distance; }
+float BSP_Ultrasonic_GetLeft(void)  { return g_sensors[1].distance; }
+float BSP_Ultrasonic_GetRight(void) { return g_sensors[2].distance; }
+
+uint8_t BSP_Ultrasonic_IsValid(uint8_t sensor)
+{
+    if (sensor >= 3)
+        return 0;
+    return g_sensors[sensor].valid &&
+           ((BSP_GetTick() - g_sensors[sensor].lastUpdateTick) < US_STALE_MS);
+}
+
+uint32_t BSP_Ultrasonic_GetAgeMs(uint8_t sensor)
+{
+    if (sensor >= 3)
+        return 0xFFFFFFFF;
+    return BSP_GetTick() - g_sensors[sensor].lastUpdateTick;
+}

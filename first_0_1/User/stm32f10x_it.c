@@ -2,56 +2,91 @@
  * Fault handlers with crash-dump to BKP registers and auto-reset.
  *
  * On HardFault / MemManage / BusFault / UsageFault:
- *   1. Save SP, LR, PC to BKP_DR1~DR3 (survive reset)
- *   2. Blink LED at 5Hz (fast) to signal fault
- *   3. Wait 3 seconds for debugger attach
- *   4. Trigger system reset via NVIC
+ *   1. Save SP, LR, PC to BKP_DR1~DR6 (each 32-bit value split across two
+ *      16-bit backup registers, so it survives reset via VBAT).
+ *   2. Write a 16-bit crash signature to BKP_DR7.
+ *   3. Trigger system reset via NVIC immediately.
  *
- * After reset, check BKP_DR4 for the magic crash marker to know
- * the reset was fault-induced.
+ * After reset, Crash_ReportAndClear() reads BKP_DR7 to detect a fault-induced
+ * boot, prints SP/LR/PC over USART, then clears the signature.
+ *
+ * NOTE: the reset must be immediate — a fault handler runs at a higher
+ * exception priority than SysTick, so any SysTick-based delay would hang.
  */
 
 #include "stm32f10x_it.h"
-#include "bsp/bsp_led.h"
-#include "bsp/bsp_systick.h"
+#include "bsp/bsp_usart.h"
 
-#define CRASH_MARKER    0xDEADBEEF
+#define CRASH_MARKER    0xDEAD   /* 16-bit: BKP registers on F103 are 16-bit wide */
+
+/* --- 32-bit value <-> pair of 16-bit BKP registers --- */
+static void BKP_Write32(uint16_t regHi, uint16_t regLo, uint32_t val)
+{
+    BKP_WriteBackupRegister(regHi, (uint16_t)(val >> 16));
+    BKP_WriteBackupRegister(regLo, (uint16_t)(val & 0xFFFF));
+}
+
+static uint32_t BKP_Read32(uint16_t regHi, uint16_t regLo)
+{
+    return ((uint32_t)BKP_ReadBackupRegister(regHi) << 16)
+         |  (uint32_t)BKP_ReadBackupRegister(regLo);
+}
 
 /* Save crash context to backup registers (powered by VBAT, survive reset) */
 static void Crash_SaveContext(uint32_t *stack)
 {
-    /* Wait for BKP/TAMPER clock */
+    /* Enable BKP/TAMPER clock and backup write access */
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_BKP | RCC_APB1Periph_PWR, ENABLE);
     PWR_BackupAccessCmd(ENABLE);
 
-    BKP_WriteBackupRegister(BKP_DR1, (uint32_t)stack);       /* SP at fault */
-    BKP_WriteBackupRegister(BKP_DR2, stack[5]);               /* LR (EXC_RETURN) */
-    BKP_WriteBackupRegister(BKP_DR3, stack[6]);               /* PC (stacked) */
-    BKP_WriteBackupRegister(BKP_DR4, CRASH_MARKER);           /* Crash signature */
-}
-
-/* Fast LED blink: 5Hz = 100ms period, 50ms on/off */
-static void Crash_BlinkLED(void)
-{
-    uint32_t tick = BSP_GetTick();
-    uint32_t phase = tick % 200;
-    if (phase < 100)
-        BSP_LED_On();
-    else
-        BSP_LED_Off();
+    BKP_Write32(BKP_DR1, BKP_DR2, (uint32_t)stack);   /* SP at fault */
+    BKP_Write32(BKP_DR3, BKP_DR4, stack[5]);           /* LR (EXC_RETURN) */
+    BKP_Write32(BKP_DR5, BKP_DR6, stack[6]);           /* PC (stacked) */
+    BKP_WriteBackupRegister(BKP_DR7, CRASH_MARKER);    /* Crash signature */
 }
 
 static void Crash_Reset(void)
 {
-    uint32_t start = BSP_GetTick();
-
-    while ((BSP_GetTick() - start) < 3000)
-    {
-        Crash_BlinkLED();
-    }
-
-    /* System reset */
+    /* Do NOT delay via SysTick here: a fault handler runs at higher priority
+     * than SysTick, so SysTick never fires and a BSP_GetTick()-based wait would
+     * hang forever. Reset immediately after saving context. */
     NVIC_SystemReset();
+}
+
+/* Send a 32-bit value as 8 uppercase hex chars over USART */
+static void SendHex32(uint32_t v)
+{
+    static const char hex[] = "0123456789ABCDEF";
+    char s[9];
+    uint8_t i;
+    for (i = 0; i < 8; i++)
+        s[i] = hex[(v >> (28 - 4 * i)) & 0xF];
+    s[8] = '\0';
+    BSP_USART_SendString(s);
+}
+
+/* Called once at boot (after USART init). If the last reset was fault-induced,
+ * print the saved SP/LR/PC and clear the signature so the next boot is clean. */
+void Crash_ReportAndClear(void)
+{
+    uint32_t sp, lr, pc;
+
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_BKP | RCC_APB1Periph_PWR, ENABLE);
+    PWR_BackupAccessCmd(ENABLE);
+
+    if (BKP_ReadBackupRegister(BKP_DR7) != CRASH_MARKER)
+        return;
+
+    sp = BKP_Read32(BKP_DR1, BKP_DR2);
+    lr = BKP_Read32(BKP_DR3, BKP_DR4);
+    pc = BKP_Read32(BKP_DR5, BKP_DR6);
+
+    BSP_USART_SendString("CRASH SP=0x"); SendHex32(sp);
+    BSP_USART_SendString(" LR=0x");      SendHex32(lr);
+    BSP_USART_SendString(" PC=0x");      SendHex32(pc);
+    BSP_USART_SendString("\n");
+
+    BKP_WriteBackupRegister(BKP_DR7, 0);   /* clear signature */
 }
 
 /* ---- Cortex-M3 fault handlers ---- */

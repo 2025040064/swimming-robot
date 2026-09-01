@@ -115,9 +115,17 @@ void App_Protocol_ParseByte(uint8_t ch)
 
             if (strncmp((char *)g_packet.raw, "TRASH,", 6) == 0)
             {
-                g_packet.type = PKT_TRASH;
                 ParseTrash((char *)g_packet.raw, &g_packet.x, &g_packet.y);
-                g_packetReady = 1;
+
+                /* Validate coordinates: the K230 frame is 640x640, so a valid
+                 * target must be within [0,639] on both axes. Reject out-of-range
+                 * / malformed frames instead of generating a bogus target. */
+                if (g_packet.x >= 0 && g_packet.x <= PROTO_IMG_MAX_X &&
+                    g_packet.y >= 0 && g_packet.y <= PROTO_IMG_MAX_Y)
+                {
+                    g_packet.type = PKT_TRASH;
+                    g_packetReady = 1;
+                }
             }
             else if (strncmp((char *)g_packet.raw, "HB", 2) == 0)
             {

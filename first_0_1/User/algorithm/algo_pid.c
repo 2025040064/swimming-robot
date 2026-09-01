@@ -54,6 +54,7 @@ void Algo_PID_Reset(PID_t *pid)
 {
     pid->integral  = 0.0f;
     pid->prevError = 0.0f;
+    pid->prevDerivative = 0.0f;   /* clear filtered D term to avoid a stale D kick */
 }
 
 void Algo_PID_SetSetpoint(PID_t *pid, float setpoint)

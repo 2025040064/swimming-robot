@@ -96,7 +96,7 @@ void App_Ctrl_SearchCruise(void)
     g_cruisePhase++;
 }
 
-void App_Ctrl_ApproachTarget(void)
+uint8_t App_Ctrl_ApproachTarget(void)
 {
     static uint32_t g_lastPidTick = 0;
     uint32_t now = BSP_GetTick();
@@ -110,16 +110,13 @@ void App_Ctrl_ApproachTarget(void)
     if (dt > 0.1f)   dt = 0.1f;
     g_lastPidTick = now;
 
-    /* Target age timeout: if no update from K230 for >500ms, coast */
-    if (g_targetValid && (now - g_targetTimestamp) > TARGET_TIMEOUT_MS)
+    /* Target lost or stale: STOP, do not keep driving straight ahead.
+     * (Previously this fell through to full approach speed for up to 10s.) */
+    if (!g_targetValid || (now - g_targetTimestamp) > TARGET_TIMEOUT_MS)
     {
         g_targetValid = 0;
-    }
-
-    if (!g_targetValid)
-    {
-        App_Ctrl_UpdateMotors(APPROACH_SPEED, APPROACH_SPEED);
-        return;
+        App_Ctrl_UpdateMotors(0, 0);
+        return 0;
     }
 
     /* Deadband: target horizontally centered -> straight ahead. Only x is a
@@ -130,7 +127,7 @@ void App_Ctrl_ApproachTarget(void)
     if (errorX < (float)IMG_DEADBAND)
     {
         App_Ctrl_UpdateMotors(APPROACH_SPEED, APPROACH_SPEED);
-        return;
+        return 1;
     }
 
     /* Yaw-only PID. Vertical (y) offset is distance/pitch, not a steering error. */
@@ -146,6 +143,7 @@ void App_Ctrl_ApproachTarget(void)
     if (right < -7200) right = -7200;
 
     App_Ctrl_UpdateMotors(left, right);
+    return 1;
 }
 
 void App_Ctrl_StartCollection(void)
@@ -190,14 +188,29 @@ uint8_t App_Ctrl_GetCruisePhase(void)
     return (uint8_t)(g_cruisePhase & 0x03);
 }
 
-void App_Ctrl_OnStateChange(uint8_t newState)
+void App_Ctrl_OnStateChange(RobotState_t newState)
 {
     Algo_PID_Reset(&g_pidX);
-    g_targetValid = 0;
     g_rampLeft  = 0;
     g_rampRight = 0;
     App_Ctrl_StopCollection();
 
     /* Also stop propulsion motors on state change to prevent runaway */
     DRV_TB6612_StopAll();
+
+    /* Only clear the target when entering a state that has no target.
+     * DETECT / APPROACH keep the freshly-set target so SetTarget() -> SetState()
+     * no longer loses it. */
+    switch (newState)
+    {
+    case STATE_INIT:
+    case STATE_SEARCH:
+    case STATE_COLLECT:
+    case STATE_AVOID:
+    case STATE_RETURN:
+        g_targetValid = 0;
+        break;
+    default:
+        break;
+    }
 }

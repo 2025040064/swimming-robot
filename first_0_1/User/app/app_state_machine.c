@@ -94,24 +94,32 @@ void App_SM_Run(void)
         }
         else if (g_state == STATE_SEARCH)
         {
-            /*
-             * Before executing cruise turn, check the corresponding
-             * side ultrasonic. If blocked, override with straight-line
-             * to avoid turning into a wall.
-             */
-            uint8_t phase = App_Ctrl_GetCruisePhase();
-
-            if (phase == 1 && BSP_Ultrasonic_GetRight() < 60.0f)
+            if (!BSP_Ultrasonic_IsValid(US_FRONT))
             {
-                App_Ctrl_UpdateMotors(CRUISE_SPEED, CRUISE_SPEED);
-            }
-            else if (phase == 3 && BSP_Ultrasonic_GetLeft() < 60.0f)
-            {
-                App_Ctrl_UpdateMotors(CRUISE_SPEED, CRUISE_SPEED);
+                /* Front ranging unavailable — hold position instead of cruising blind. */
+                App_Ctrl_UpdateMotors(0, 0);
             }
             else
             {
-                App_Ctrl_SearchCruise();
+                /*
+                 * Before executing cruise turn, check the corresponding
+                 * side ultrasonic. If blocked, override with straight-line
+                 * to avoid turning into a wall.
+                 */
+                uint8_t phase = App_Ctrl_GetCruisePhase();
+
+                if (phase == 1 && BSP_Ultrasonic_GetRight() < 60.0f)
+                {
+                    App_Ctrl_UpdateMotors(CRUISE_SPEED, CRUISE_SPEED);
+                }
+                else if (phase == 3 && BSP_Ultrasonic_GetLeft() < 60.0f)
+                {
+                    App_Ctrl_UpdateMotors(CRUISE_SPEED, CRUISE_SPEED);
+                }
+                else
+                {
+                    App_Ctrl_SearchCruise();
+                }
             }
         }
         break;
@@ -143,7 +151,14 @@ void App_SM_Run(void)
     case STATE_APPROACH:
         BSP_Ultrasonic_Update();
 
-        if (BSP_Ultrasonic_GetFront() < 30.0f)
+        if (!BSP_Ultrasonic_IsValid(US_FRONT))
+        {
+            /* Front ranging unavailable — unknown obstacle ahead: stop safely
+             * instead of driving forward blind. */
+            App_Ctrl_StopAll();
+            App_SM_SetState(STATE_SEARCH, 0);
+        }
+        else if (BSP_Ultrasonic_GetFront() < 30.0f)
         {
             App_SM_SetState(STATE_COLLECT, 5000);
         }
@@ -164,11 +179,19 @@ void App_SM_Run(void)
             {
                 App_Ctrl_SetTarget(pkt->x, pkt->y);
             }
-            App_Ctrl_ApproachTarget();
+            if (!App_Ctrl_ApproachTarget())
+            {
+                App_Ctrl_StopAll();
+                App_SM_SetState(STATE_SEARCH, 0);
+            }
         }
         else
         {
-            App_Ctrl_ApproachTarget();
+            if (!App_Ctrl_ApproachTarget())
+            {
+                App_Ctrl_StopAll();
+                App_SM_SetState(STATE_SEARCH, 0);
+            }
         }
         break;
 
