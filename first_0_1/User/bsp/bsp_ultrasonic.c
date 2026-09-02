@@ -2,7 +2,7 @@
  * Ultrasonic driver for 3x AJ-SRP04M sensors, using microsecond-level timing.
  *
  * Timing: TIM3 runs as a free-running 1MHz (1 us/tick) counter. The Echo pins
- * (PA7/EXTI7, PB6/EXTI6, PB8/EXTI8) trigger EXTI interrupts on BOTH edges:
+ * (PA7/EXTI7, PB6/EXTI6, PB4/EXTI4) trigger EXTI interrupts on BOTH edges:
  *   - rising edge  -> record TIM3->CNT as the echo start
  *   - falling edge -> delta_us * 0.017 = distance in cm
  *
@@ -70,10 +70,16 @@ static void Ultrasonic_Trigger(US_Sensor_t *s, uint32_t now)
     TriggerPulse(s);
 }
 
-/* ---- Process one Echo edge (called from EXTI9_5_IRQHandler) ---- */
+/* ---- Process one Echo edge (called from the corresponding EXTI IRQ) ---- */
 static void US_CaptureEdge(US_Sensor_t *s, uint32_t now)
 {
     uint8_t level = GPIO_ReadInputDataBit(s->echoPort, s->echoPin);
+
+    /* Ignore delayed echoes and line noise outside this sensor's own slot. */
+    if (!s->measuring)
+    {
+        return;
+    }
 
     if (level)   /* rising edge: start the pulse width measurement */
     {
@@ -138,18 +144,26 @@ void BSP_Ultrasonic_Init(void)
     /* Map echo pins to EXTI lines, trigger on both edges. */
     GPIO_EXTILineConfig(GPIO_PortSourceGPIOA, GPIO_PinSource7);   /* front PA7 */
     GPIO_EXTILineConfig(GPIO_PortSourceGPIOB, GPIO_PinSource6);   /* left  PB6 */
-    GPIO_EXTILineConfig(GPIO_PortSourceGPIOB, GPIO_PinSource8);   /* right PB8 */
+    GPIO_EXTILineConfig(GPIO_PortSourceGPIOB, GPIO_PinSource4);   /* right PB4 */
 
-    EXTI_InitStructure.EXTI_Line    = EXTI_Line6 | EXTI_Line7 | EXTI_Line8;
+    EXTI_InitStructure.EXTI_Line    = EXTI_Line6 | EXTI_Line7;
     EXTI_InitStructure.EXTI_Mode    = EXTI_Mode_Interrupt;
     EXTI_InitStructure.EXTI_Trigger = EXTI_Trigger_Rising_Falling;
     EXTI_InitStructure.EXTI_LineCmd = ENABLE;
     EXTI_Init(&EXTI_InitStructure);
 
-    NVIC_InitStructure.NVIC_IRQChannel                   = EXTI9_5_IRQn;
-    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 2;
+    EXTI_InitStructure.EXTI_Line = EXTI_Line4;
+    EXTI_Init(&EXTI_InitStructure);
+
+    /* Echo pulse edges must pre-empt UART parsing for reliable timing. */
+    NVIC_InitStructure.NVIC_IRQChannel                   = EXTI4_IRQn;
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
     NVIC_InitStructure.NVIC_IRQChannelSubPriority        = 0;
     NVIC_InitStructure.NVIC_IRQChannelCmd                = ENABLE;
+    NVIC_Init(&NVIC_InitStructure);
+
+    NVIC_InitStructure.NVIC_IRQChannel = EXTI9_5_IRQn;
+    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
     NVIC_Init(&NVIC_InitStructure);
 
     /* Init sensor control blocks */
@@ -199,7 +213,19 @@ void BSP_Ultrasonic_Update(void)
     if (g_sensorIdx >= 3) g_sensorIdx = 0;
 }
 
-/* ---- EXTI9_5 shared IRQ: PA7(EXTI7) / PB6(EXTI6) / PB8(EXTI8) ---- */
+/* ---- EXTI4 IRQ: PB4(EXTI4), right echo ---- */
+void EXTI4_IRQHandler(void)
+{
+    uint32_t now = BSP_GetTick();
+
+    if (EXTI_GetITStatus(EXTI_Line4) != RESET)
+    {
+        EXTI_ClearITPendingBit(EXTI_Line4);
+        US_CaptureEdge(&g_sensors[2], now);
+    }
+}
+
+/* ---- EXTI9_5 shared IRQ: PA7(EXTI7) / PB6(EXTI6) ---- */
 void EXTI9_5_IRQHandler(void)
 {
     uint32_t now = BSP_GetTick();
@@ -213,11 +239,6 @@ void EXTI9_5_IRQHandler(void)
     {
         EXTI_ClearITPendingBit(EXTI_Line6);
         US_CaptureEdge(&g_sensors[1], now);
-    }
-    if (EXTI_GetITStatus(EXTI_Line8) != RESET)   /* right PB8 */
-    {
-        EXTI_ClearITPendingBit(EXTI_Line8);
-        US_CaptureEdge(&g_sensors[2], now);
     }
 }
 

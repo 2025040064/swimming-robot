@@ -3,30 +3,26 @@
 
 #include "stm32f10x.h"
 
-/* Software I2C pins: PB10=SCL, PB11=SDA */
-#define IIC_SCL_PORT        GPIOB
-#define IIC_SCL_PIN         GPIO_Pin_10
-#define IIC_SDA_PORT        GPIOB
-#define IIC_SDA_PIN         GPIO_Pin_11
-#define IIC_CLK             RCC_APB2Periph_GPIOB
+/* Hardware I2C1 is remapped by BSP_Board_Init(): SCL=PB8, SDA=PB9. */
+#define IIC_PERIPH              I2C1
+#define IIC_PERIPH_CLK          RCC_APB1Periph_I2C1
+#define IIC_GPIO_PORT           GPIOB
+#define IIC_GPIO_CLK            RCC_APB2Periph_GPIOB
+#define IIC_SCL_PIN             GPIO_Pin_8
+#define IIC_SDA_PIN             GPIO_Pin_9
+#define IIC_BUS_SPEED           100000UL
 
-/* Timeout iterations for WaitAck (prevents permanent hang if MPU6050 unresponsive) */
-#define IIC_TIMEOUT         2000
-
-#define IIC_SCL_H()         GPIO_SetBits(IIC_SCL_PORT, IIC_SCL_PIN)
-#define IIC_SCL_L()         GPIO_ResetBits(IIC_SCL_PORT, IIC_SCL_PIN)
-#define IIC_SDA_H()         GPIO_SetBits(IIC_SDA_PORT, IIC_SDA_PIN)
-#define IIC_SDA_L()         GPIO_ResetBits(IIC_SDA_PORT, IIC_SDA_PIN)
-#define IIC_SDA_READ()      GPIO_ReadInputDataBit(IIC_SDA_PORT, IIC_SDA_PIN)
+/* All device addresses passed to this BSP are unshifted 7-bit I2C addresses. */
+#define BSP_IIC_OK              0U
+#define BSP_IIC_ERR_PARAM       1U
+#define BSP_IIC_ERR_TIMEOUT     2U
+#define BSP_IIC_ERR_NACK        3U
+#define BSP_IIC_ERR_BUS         4U
+#define BSP_IIC_ERR_BUSY        5U
 
 void    BSP_IIC_Init(void);
-void    BSP_IIC_Start(void);
-void    BSP_IIC_Stop(void);
-void    BSP_IIC_SendAck(void);
-void    BSP_IIC_SendNAck(void);
-void    BSP_IIC_SendByte(uint8_t data);
-uint8_t BSP_IIC_ReadByte(uint8_t ack);
-uint8_t BSP_IIC_WriteAddr(uint8_t addr, uint8_t reg, uint8_t data);
-uint8_t BSP_IIC_ReadAddr(uint8_t addr, uint8_t reg, uint8_t *buf, uint8_t len);
+void    BSP_IIC_Recover(void);
+uint8_t BSP_IIC_WriteAddr(uint8_t addr7, uint8_t reg, uint8_t data);
+uint8_t BSP_IIC_ReadAddr(uint8_t addr7, uint8_t reg, uint8_t *buf, uint8_t len);
 
 #endif

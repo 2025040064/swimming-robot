@@ -2,10 +2,12 @@
 #include "stm32f10x_it.h"
 #include "system_stm32f10x.h"
 #include "bsp/bsp_systick.h"
+#include "bsp/bsp_board.h"
 #include "bsp/bsp_led.h"
 #include "bsp/bsp_usart.h"
 #include "bsp/bsp_iic.h"
 #include "bsp/bsp_mpu6050.h"
+#include "bsp/bsp_qmc5883l.h"
 #include "bsp/bsp_ultrasonic.h"
 #include "bsp/bsp_debug.h"
 #include "bsp/bsp_adc.h"
@@ -43,14 +45,17 @@ int main(void)
 {
     SystemCoreClockUpdate();
 
-    IWDG_Init();
-
+    /* Apply every AFIO remap before a peripheral claims its GPIO pins. */
+    BSP_Board_Init();
     BSP_SysTick_Init();
     BSP_LED_Init();
-    BSP_USART_Init(115200);
-    Crash_ReportAndClear();   /* report any previous fault, then clear signature */
+    BSP_K230_Init(K230_DEFAULT_BAUDRATE);
+    BSP_GPS_Init(GPS_DEFAULT_BAUDRATE);
+    Crash_ReportAndClear();   /* clear any prior fault marker; keep protocol UARTs clean */
     BSP_Ultrasonic_Init();
+    BSP_IIC_Init();
     BSP_MPU6050_Init();
+    BSP_QMC5883L_Init();
     BSP_ADC_Init();
     DRV_TB6612_Init();
 
@@ -75,7 +80,10 @@ int main(void)
         }
     }
 
-    BSP_USART_SendString("ROBOT_READY\n");
+    /* Start the watchdog only after bounded peripheral bring-up has completed. */
+    IWDG_Init();
+
+    BSP_K230_SendString("ROBOT_READY\n");
     DBG_PRINT("Boot OK, IWDG=%ums, MPU6050=0x%02X\n", IWDG_TIMEOUT_MS,
               BSP_MPU6050_Test());
 

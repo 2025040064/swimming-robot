@@ -1,14 +1,20 @@
 #include "bsp_mpu6050.h"
 #include "bsp_iic.h"
 
-void BSP_MPU6050_Init(void)
+uint8_t BSP_MPU6050_Init(void)
 {
-    BSP_IIC_Init();
-    BSP_IIC_WriteAddr(MPU6050_ADDR, MPU6050_PWR_MGMT1, 0x00);
-    BSP_IIC_WriteAddr(MPU6050_ADDR, MPU6050_SMPLRT_DIV, 0x07);
-    BSP_IIC_WriteAddr(MPU6050_ADDR, MPU6050_CONFIG, 0x06);
-    BSP_IIC_WriteAddr(MPU6050_ADDR, MPU6050_GYRO_CONFIG, 0x18);
-    BSP_IIC_WriteAddr(MPU6050_ADDR, MPU6050_ACCEL_CONFIG, 0x18);
+    uint8_t result;
+
+    result = BSP_IIC_WriteAddr(MPU6050_ADDR, MPU6050_PWR_MGMT1, 0x00);
+    if (result != BSP_IIC_OK) return result;
+    result = BSP_IIC_WriteAddr(MPU6050_ADDR, MPU6050_SMPLRT_DIV, 0x07);
+    if (result != BSP_IIC_OK) return result;
+    result = BSP_IIC_WriteAddr(MPU6050_ADDR, MPU6050_CONFIG, 0x06);
+    if (result != BSP_IIC_OK) return result;
+    result = BSP_IIC_WriteAddr(MPU6050_ADDR, MPU6050_GYRO_CONFIG, 0x18);
+    if (result != BSP_IIC_OK) return result;
+    result = BSP_IIC_WriteAddr(MPU6050_ADDR, MPU6050_ACCEL_CONFIG, 0x18);
+    return result;
 }
 
 uint8_t BSP_MPU6050_ReadData(int16_t *accel, int16_t *gyro)

@@ -7,15 +7,15 @@
  *   2. Write a 16-bit crash signature to BKP_DR7.
  *   3. Trigger system reset via NVIC immediately.
  *
- * After reset, Crash_ReportAndClear() reads BKP_DR7 to detect a fault-induced
- * boot, prints SP/LR/PC over USART, then clears the signature.
+ * After reset, Crash_ReportAndClear() clears the fault signature without using
+ * a UART. USART1 is reserved for the K230 protocol and USART2 for GPS, so
+ * unsolicited crash text must not be injected into either device link.
  *
  * NOTE: the reset must be immediate — a fault handler runs at a higher
  * exception priority than SysTick, so any SysTick-based delay would hang.
  */
 
 #include "stm32f10x_it.h"
-#include "bsp/bsp_usart.h"
 
 #define CRASH_MARKER    0xDEAD   /* 16-bit: BKP registers on F103 are 16-bit wide */
 
@@ -24,12 +24,6 @@ static void BKP_Write32(uint16_t regHi, uint16_t regLo, uint32_t val)
 {
     BKP_WriteBackupRegister(regHi, (uint16_t)(val >> 16));
     BKP_WriteBackupRegister(regLo, (uint16_t)(val & 0xFFFF));
-}
-
-static uint32_t BKP_Read32(uint16_t regHi, uint16_t regLo)
-{
-    return ((uint32_t)BKP_ReadBackupRegister(regHi) << 16)
-         |  (uint32_t)BKP_ReadBackupRegister(regLo);
 }
 
 /* Save crash context to backup registers (powered by VBAT, survive reset) */
@@ -53,38 +47,14 @@ static void Crash_Reset(void)
     NVIC_SystemReset();
 }
 
-/* Send a 32-bit value as 8 uppercase hex chars over USART */
-static void SendHex32(uint32_t v)
-{
-    static const char hex[] = "0123456789ABCDEF";
-    char s[9];
-    uint8_t i;
-    for (i = 0; i < 8; i++)
-        s[i] = hex[(v >> (28 - 4 * i)) & 0xF];
-    s[8] = '\0';
-    BSP_USART_SendString(s);
-}
-
-/* Called once at boot (after USART init). If the last reset was fault-induced,
- * print the saved SP/LR/PC and clear the signature so the next boot is clean. */
+/* Called once at boot. Keep dedicated K230/GPS links protocol-clean. */
 void Crash_ReportAndClear(void)
 {
-    uint32_t sp, lr, pc;
-
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_BKP | RCC_APB1Periph_PWR, ENABLE);
     PWR_BackupAccessCmd(ENABLE);
 
     if (BKP_ReadBackupRegister(BKP_DR7) != CRASH_MARKER)
         return;
-
-    sp = BKP_Read32(BKP_DR1, BKP_DR2);
-    lr = BKP_Read32(BKP_DR3, BKP_DR4);
-    pc = BKP_Read32(BKP_DR5, BKP_DR6);
-
-    BSP_USART_SendString("CRASH SP=0x"); SendHex32(sp);
-    BSP_USART_SendString(" LR=0x");      SendHex32(lr);
-    BSP_USART_SendString(" PC=0x");      SendHex32(pc);
-    BSP_USART_SendString("\n");
 
     BKP_WriteBackupRegister(BKP_DR7, 0);   /* clear signature */
 }

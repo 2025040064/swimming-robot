@@ -19,7 +19,7 @@ void MemManage_Handler_C(uint32_t *stack);
 void BusFault_Handler_C(uint32_t *stack);
 void UsageFault_Handler_C(uint32_t *stack);
 
-/* Boot-time crash report: prints saved SP/LR/PC and clears the signature */
+/* Boot-time fault-marker clear; never writes bytes into K230/GPS UART links. */
 void Crash_ReportAndClear(void);
 
 #endif

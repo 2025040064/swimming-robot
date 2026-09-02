@@ -32,11 +32,11 @@
 #define US_L_ECHO_PORT   GPIOB
 #define US_L_ECHO_PIN    GPIO_Pin_6
 
-/* Right: Trig=PB7, Echo=PB8 (EXTI8) */
+/* Right: Trig=PB3, Echo=PB4 (EXTI4). PB3/PB4 require JTAG to be disabled. */
 #define US_R_TRIG_PORT   GPIOB
-#define US_R_TRIG_PIN    GPIO_Pin_7
+#define US_R_TRIG_PIN    GPIO_Pin_3
 #define US_R_ECHO_PORT   GPIOB
-#define US_R_ECHO_PIN    GPIO_Pin_8
+#define US_R_ECHO_PIN    GPIO_Pin_4
 
 void BSP_Ultrasonic_Init(void);
 void BSP_Ultrasonic_Update(void);

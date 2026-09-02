@@ -137,10 +137,10 @@ uint8_t App_Ctrl_ApproachTarget(void)
     left  = APPROACH_SPEED - (int16_t)pidX;
     right = APPROACH_SPEED + (int16_t)pidX;
 
-    if (left  > 7200) left  = 7200;
-    if (left  < -7200) left  = -7200;
-    if (right > 7200) right = 7200;
-    if (right < -7200) right = -7200;
+    if (left  > 7199) left  = 7199;
+    if (left  < -7199) left  = -7199;
+    if (right > 7199) right = 7199;
+    if (right < -7199) right = -7199;
 
     App_Ctrl_UpdateMotors(left, right);
     return 1;

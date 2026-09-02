@@ -29,11 +29,21 @@ void DRV_TB6612_Init(void)
     GPIO_InitStructure.GPIO_Pin = TB2_STBY_PIN;
     GPIO_Init(GPIOA, &GPIO_InitStructure);
 
-    /* PWM GPIOs: PA0-3 for TIM2 CH1-4 */
-    GPIO_InitStructure.GPIO_Pin  = GPIO_Pin_0 | GPIO_Pin_1 | GPIO_Pin_2 | GPIO_Pin_3;
+    /* TIM2 PartialRemap2: CH1=PA0, CH2=PA1, CH3=PB10, CH4=PB11. */
+    GPIO_InitStructure.GPIO_Pin  = GPIO_Pin_0 | GPIO_Pin_1;
     GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
     GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
     GPIO_Init(GPIOA, &GPIO_InitStructure);
+
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10 | GPIO_Pin_11;
+    GPIO_Init(GPIOB, &GPIO_InitStructure);
+
+    /* Keep both bridges disabled until every direction/PWM output is safe. */
+    GPIO_ResetBits(TB1_STBY_PORT, TB1_STBY_PIN);
+    GPIO_ResetBits(TB2_STBY_PORT, TB2_STBY_PIN);
+    GPIO_ResetBits(GPIOB, TB1_AIN1_PIN | TB1_AIN2_PIN | TB1_BIN1_PIN | TB1_BIN2_PIN);
+    GPIO_ResetBits(GPIOA, TB2_AIN1_PIN | TB2_AIN2_PIN);
+    GPIO_ResetBits(GPIOB, TB2_BIN1_PIN | TB2_BIN2_PIN);
 
     /* TIM2: 10kHz PWM = 72MHz / (0+1) / (7199+1) = 10kHz */
     TIM_TimeBaseStructure.TIM_Prescaler         = 0;
@@ -60,9 +70,9 @@ void DRV_TB6612_Init(void)
     TIM_ARRPreloadConfig(TB_PWM_TIM, ENABLE);
     TIM_Cmd(TB_PWM_TIM, ENABLE);
 
+    DRV_TB6612_StopAll();
     DRV_TB6612_SetStandby(1, 1);
     DRV_TB6612_SetStandby(2, 1);
-    DRV_TB6612_StopAll();
 }
 
 void DRV_TB6612_SetStandby(uint8_t tbNum, uint8_t state)
@@ -87,8 +97,8 @@ void DRV_TB6612_SetSpeed(uint8_t motor, int16_t speed)
 {
     uint8_t dir;
 
-    if (speed > 7200)  speed = 7200;
-    if (speed < -7200) speed = -7200;
+    if (speed > TB_PWM_MAX_DUTY)  speed = TB_PWM_MAX_DUTY;
+    if (speed < -TB_PWM_MAX_DUTY) speed = -TB_PWM_MAX_DUTY;
 
     dir = (speed >= 0) ? 1 : 0;
     if (speed < 0) speed = -speed;

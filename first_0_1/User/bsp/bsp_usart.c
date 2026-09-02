@@ -1,116 +1,313 @@
+/* Dedicated UART drivers: USART1 for K230 and USART2 for GPS. */
+
 #include "bsp_usart.h"
 
-static volatile uint8_t g_rxBuf[USART_RX_BUF_SIZE];
-static volatile uint16_t g_rxHead = 0;
-static volatile uint16_t g_rxTail = 0;
-static volatile uint32_t g_oreCount = 0;
+#define USART_TX_TIMEOUT_LOOPS     100000UL
 
-void BSP_USART_Init(uint32_t baudrate)
+static volatile uint8_t g_k230RxBuf[K230_RX_BUF_SIZE];
+static volatile uint16_t g_k230RxHead = 0;
+static volatile uint16_t g_k230RxTail = 0;
+static volatile uint32_t g_k230OreCount = 0;
+static volatile uint32_t g_k230RxDropCount = 0;
+
+/* K230 telemetry is queued so a status frame does not block the scheduler. */
+static volatile uint8_t g_k230TxBuf[K230_TX_BUF_SIZE];
+static volatile uint16_t g_k230TxHead = 0;
+static volatile uint16_t g_k230TxTail = 0;
+static volatile uint32_t g_k230TxDropCount = 0;
+
+static volatile uint8_t g_gpsRxBuf[GPS_RX_BUF_SIZE];
+static volatile uint16_t g_gpsRxHead = 0;
+static volatile uint16_t g_gpsRxTail = 0;
+static volatile uint32_t g_gpsOreCount = 0;
+static volatile uint32_t g_gpsRxDropCount = 0;
+
+static void USART_CommonInit(USART_TypeDef *USARTx, uint32_t baudrate)
+{
+    USART_InitTypeDef USART_InitStructure;
+
+    USART_InitStructure.USART_BaudRate = baudrate;
+    USART_InitStructure.USART_WordLength = USART_WordLength_8b;
+    USART_InitStructure.USART_StopBits = USART_StopBits_1;
+    USART_InitStructure.USART_Parity = USART_Parity_No;
+    USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None;
+    USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;
+    USART_Init(USARTx, &USART_InitStructure);
+    USART_ITConfig(USARTx, USART_IT_RXNE, ENABLE);
+    USART_Cmd(USARTx, ENABLE);
+}
+
+static void K230_RxPush(uint8_t ch)
+{
+    uint16_t nextHead = (uint16_t)((g_k230RxHead + 1U) % K230_RX_BUF_SIZE);
+
+    if (nextHead == g_k230RxTail)
+        g_k230RxDropCount++;
+    else
+    {
+        g_k230RxBuf[g_k230RxHead] = ch;
+        g_k230RxHead = nextHead;
+    }
+}
+
+static void GPS_RxPush(uint8_t ch)
+{
+    uint16_t nextHead = (uint16_t)((g_gpsRxHead + 1U) % GPS_RX_BUF_SIZE);
+
+    if (nextHead == g_gpsRxTail)
+        g_gpsRxDropCount++;
+    else
+    {
+        g_gpsRxBuf[g_gpsRxHead] = ch;
+        g_gpsRxHead = nextHead;
+    }
+}
+
+static uint16_t K230_TxFree(void)
+{
+    if (g_k230TxHead >= g_k230TxTail)
+        return (uint16_t)(K230_TX_BUF_SIZE - (g_k230TxHead - g_k230TxTail) - 1U);
+    return (uint16_t)(g_k230TxTail - g_k230TxHead - 1U);
+}
+
+void BSP_K230_Init(uint32_t baudrate)
 {
     GPIO_InitTypeDef GPIO_InitStructure;
-    USART_InitTypeDef USART_InitStructure;
     NVIC_InitTypeDef NVIC_InitStructure;
 
     RCC_APB2PeriphClockCmd(K230_USART_CLK | K230_USART_GPIO_CLK, ENABLE);
 
-    GPIO_InitStructure.GPIO_Pin   = K230_USART_TX_PIN;
-    GPIO_InitStructure.GPIO_Mode  = GPIO_Mode_AF_PP;
+    GPIO_InitStructure.GPIO_Pin = K230_USART_TX_PIN;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
     GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
     GPIO_Init(K230_USART_GPIO, &GPIO_InitStructure);
 
-    GPIO_InitStructure.GPIO_Pin   = K230_USART_RX_PIN;
-    GPIO_InitStructure.GPIO_Mode  = GPIO_Mode_IN_FLOATING;
+    GPIO_InitStructure.GPIO_Pin = K230_USART_RX_PIN;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
     GPIO_Init(K230_USART_GPIO, &GPIO_InitStructure);
 
-    USART_InitStructure.USART_BaudRate            = baudrate;
-    USART_InitStructure.USART_WordLength          = USART_WordLength_8b;
-    USART_InitStructure.USART_StopBits            = USART_StopBits_1;
-    USART_InitStructure.USART_Parity              = USART_Parity_No;
-    USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None;
-    USART_InitStructure.USART_Mode                = USART_Mode_Rx | USART_Mode_Tx;
-    USART_Init(K230_USART, &USART_InitStructure);
+    g_k230RxHead = 0;
+    g_k230RxTail = 0;
+    g_k230TxHead = 0;
+    g_k230TxTail = 0;
+    g_k230OreCount = 0;
+    g_k230RxDropCount = 0;
+    g_k230TxDropCount = 0;
 
-    USART_ITConfig(K230_USART, USART_IT_RXNE, ENABLE);
+    USART_CommonInit(K230_USART, baudrate);
 
-    NVIC_InitStructure.NVIC_IRQChannel                   = K230_USART_IRQn;
+    NVIC_InitStructure.NVIC_IRQChannel = K230_USART_IRQn;
     NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 1;
-    NVIC_InitStructure.NVIC_IRQChannelSubPriority        = 0;
-    NVIC_InitStructure.NVIC_IRQChannelCmd                = ENABLE;
+    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
+    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
     NVIC_Init(&NVIC_InitStructure);
-
-    USART_Cmd(K230_USART, ENABLE);
 }
 
-#define USART_TX_TIMEOUT    100000U   /* ~1.4ms at 72MHz — fail-safe against TX pin stuck low */
-
-void BSP_USART_SendByte(uint8_t ch)
+uint8_t BSP_K230_SendBuf(const uint8_t *buf, uint16_t len)
 {
-    uint32_t timeout = USART_TX_TIMEOUT;
-    USART_SendData(K230_USART, ch);
-    while (USART_GetFlagStatus(K230_USART, USART_FLAG_TXE) == RESET && --timeout);
+    uint16_t i;
+
+    if ((buf == 0) || (len == 0U))
+        return BSP_USART_OK;
+
+    __disable_irq();
+    if (len > K230_TxFree())
+    {
+        g_k230TxDropCount++;
+        __enable_irq();
+        return BSP_USART_ERR_TX_FULL;
+    }
+
+    for (i = 0; i < len; i++)
+    {
+        g_k230TxBuf[g_k230TxHead] = buf[i];
+        g_k230TxHead = (uint16_t)((g_k230TxHead + 1U) % K230_TX_BUF_SIZE);
+    }
+    USART_ITConfig(K230_USART, USART_IT_TXE, ENABLE);
+    __enable_irq();
+    return BSP_USART_OK;
 }
 
-void BSP_USART_SendString(char *str)
+uint8_t BSP_K230_SendByte(uint8_t ch)
 {
-    while (*str)
-    {
-        BSP_USART_SendByte(*str++);
-    }
+    return BSP_K230_SendBuf(&ch, 1);
 }
 
-void BSP_USART_SendBuf(uint8_t *buf, uint16_t len)
+uint8_t BSP_K230_SendString(const char *str)
 {
-    while (len--)
-    {
-        BSP_USART_SendByte(*buf++);
-    }
+    uint16_t len = 0;
+
+    if (str == 0)
+        return BSP_USART_OK;
+    while (str[len] != '\0')
+        len++;
+    return BSP_K230_SendBuf((const uint8_t *)str, len);
 }
 
-void USART1_IRQHandler(void)
-{
-    if (USART_GetITStatus(K230_USART, USART_IT_RXNE) != RESET)
-    {
-        uint8_t ch = USART_ReceiveData(K230_USART);
-        uint16_t nextHead = (g_rxHead + 1) % USART_RX_BUF_SIZE;
-        if (nextHead != g_rxTail)
-        {
-            g_rxBuf[g_rxHead] = ch;
-            g_rxHead = nextHead;
-        }
-        /* else: buffer full, byte dropped */
-    }
-    if (USART_GetITStatus(K230_USART, USART_IT_ORE) != RESET)
-    {
-        g_oreCount++;
-        USART_ReceiveData(K230_USART);  /* Clear ORE flag */
-    }
-}
-
-uint8_t BSP_USART_GetRxByte(void)
+uint8_t BSP_K230_GetRxByte(void)
 {
     uint8_t ch = 0;
-    if (g_rxTail != g_rxHead)
+
+    if (g_k230RxTail != g_k230RxHead)
     {
-        ch = g_rxBuf[g_rxTail];
-        g_rxTail = (g_rxTail + 1) % USART_RX_BUF_SIZE;
+        ch = g_k230RxBuf[g_k230RxTail];
+        g_k230RxTail = (uint16_t)((g_k230RxTail + 1U) % K230_RX_BUF_SIZE);
     }
     return ch;
 }
 
-uint8_t BSP_USART_RxAvailable(void)
+uint8_t BSP_K230_RxAvailable(void)
 {
-    return (g_rxHead != g_rxTail) ? 1 : 0;
+    return (g_k230RxHead != g_k230RxTail) ? 1U : 0U;
 }
 
-void BSP_USART_ClearRx(void)
+void BSP_K230_ClearRx(void)
 {
     __disable_irq();
-    g_rxHead = 0;
-    g_rxTail = 0;
+    g_k230RxHead = 0;
+    g_k230RxTail = 0;
     __enable_irq();
 }
 
-uint32_t BSP_USART_GetOreCount(void)
+uint32_t BSP_K230_GetOreCount(void) { return g_k230OreCount; }
+uint32_t BSP_K230_GetRxDropCount(void) { return g_k230RxDropCount; }
+uint32_t BSP_K230_GetTxDropCount(void) { return g_k230TxDropCount; }
+
+void BSP_GPS_Init(uint32_t baudrate)
 {
-    return g_oreCount;
+    GPIO_InitTypeDef GPIO_InitStructure;
+    NVIC_InitTypeDef NVIC_InitStructure;
+
+    RCC_APB2PeriphClockCmd(GPS_USART_GPIO_CLK, ENABLE);
+    RCC_APB1PeriphClockCmd(GPS_USART_CLK, ENABLE);
+
+    GPIO_InitStructure.GPIO_Pin = GPS_USART_TX_PIN;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_Init(GPS_USART_GPIO, &GPIO_InitStructure);
+
+    GPIO_InitStructure.GPIO_Pin = GPS_USART_RX_PIN;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+    GPIO_Init(GPS_USART_GPIO, &GPIO_InitStructure);
+
+    g_gpsRxHead = 0;
+    g_gpsRxTail = 0;
+    g_gpsOreCount = 0;
+    g_gpsRxDropCount = 0;
+
+    USART_CommonInit(GPS_USART, baudrate);
+
+    NVIC_InitStructure.NVIC_IRQChannel = GPS_USART_IRQn;
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 2;
+    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
+    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+    NVIC_Init(&NVIC_InitStructure);
+}
+
+uint8_t BSP_GPS_SendByte(uint8_t ch)
+{
+    uint32_t timeout = USART_TX_TIMEOUT_LOOPS;
+
+    USART_SendData(GPS_USART, ch);
+    while ((USART_GetFlagStatus(GPS_USART, USART_FLAG_TXE) == RESET) && (--timeout != 0U))
+    {
+    }
+    return (timeout == 0U) ? BSP_USART_ERR_TX_TIMEOUT : BSP_USART_OK;
+}
+
+uint8_t BSP_GPS_SendBuf(const uint8_t *buf, uint16_t len)
+{
+    uint8_t result;
+
+    if ((buf == 0) || (len == 0U))
+        return BSP_USART_OK;
+    while (len--)
+    {
+        result = BSP_GPS_SendByte(*buf++);
+        if (result != BSP_USART_OK)
+            return result;
+    }
+    return BSP_USART_OK;
+}
+
+uint8_t BSP_GPS_SendString(const char *str)
+{
+    uint16_t len = 0;
+
+    if (str == 0)
+        return BSP_USART_OK;
+    while (str[len] != '\0')
+        len++;
+    return BSP_GPS_SendBuf((const uint8_t *)str, len);
+}
+
+uint8_t BSP_GPS_GetRxByte(void)
+{
+    uint8_t ch = 0;
+
+    if (g_gpsRxTail != g_gpsRxHead)
+    {
+        ch = g_gpsRxBuf[g_gpsRxTail];
+        g_gpsRxTail = (uint16_t)((g_gpsRxTail + 1U) % GPS_RX_BUF_SIZE);
+    }
+    return ch;
+}
+
+uint8_t BSP_GPS_RxAvailable(void)
+{
+    return (g_gpsRxHead != g_gpsRxTail) ? 1U : 0U;
+}
+
+void BSP_GPS_ClearRx(void)
+{
+    __disable_irq();
+    g_gpsRxHead = 0;
+    g_gpsRxTail = 0;
+    __enable_irq();
+}
+
+uint32_t BSP_GPS_GetOreCount(void) { return g_gpsOreCount; }
+uint32_t BSP_GPS_GetRxDropCount(void) { return g_gpsRxDropCount; }
+
+void USART1_IRQHandler(void)
+{
+    uint16_t status = K230_USART->SR;
+    uint8_t ch;
+
+    if ((status & (USART_SR_RXNE | USART_SR_ORE | USART_SR_NE | USART_SR_FE)) != 0U)
+    {
+        ch = (uint8_t)K230_USART->DR;  /* SR then DR clears RX/error flags. */
+        if ((status & USART_SR_RXNE) != 0U)
+            K230_RxPush(ch);
+        if ((status & USART_SR_ORE) != 0U)
+            g_k230OreCount++;
+    }
+
+    if (((status & USART_SR_TXE) != 0U) && ((K230_USART->CR1 & USART_CR1_TXEIE) != 0U))
+    {
+        if (g_k230TxTail != g_k230TxHead)
+        {
+            K230_USART->DR = g_k230TxBuf[g_k230TxTail];
+            g_k230TxTail = (uint16_t)((g_k230TxTail + 1U) % K230_TX_BUF_SIZE);
+        }
+        else
+        {
+            USART_ITConfig(K230_USART, USART_IT_TXE, DISABLE);
+        }
+    }
+}
+
+void USART2_IRQHandler(void)
+{
+    uint16_t status = GPS_USART->SR;
+    uint8_t ch;
+
+    if ((status & (USART_SR_RXNE | USART_SR_ORE | USART_SR_NE | USART_SR_FE)) != 0U)
+    {
+        ch = (uint8_t)GPS_USART->DR;   /* SR then DR clears RX/error flags. */
+        if ((status & USART_SR_RXNE) != 0U)
+            GPS_RxPush(ch);
+        if ((status & USART_SR_ORE) != 0U)
+            g_gpsOreCount++;
+    }
 }

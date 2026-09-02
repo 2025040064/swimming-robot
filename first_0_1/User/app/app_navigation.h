@@ -24,8 +24,13 @@ float App_Nav_GetHeadingToTarget(float curLat, float curLng);
 void App_Nav_UpdateGPS(float lat, float lng);
 void App_Nav_UpdateCompass(float heading);
 
-/* Extended sensor interface */
+/* GPS receives NMEA through USART2; only checksum-verified valid RMC fixes update position. */
+void App_Nav_GPS_FeedByte(uint8_t ch);
 void App_Nav_GPS_Parse(const char *nmea);
-void App_Nav_QMC5883_Read(int16_t *mag);
+uint8_t App_Nav_GPS_IsFixValid(void);
+uint32_t App_Nav_GPS_GetAgeMs(void);
+
+/* Raw QMC5883L data needs installation calibration before it is a true heading. */
+uint8_t App_Nav_QMC5883_Read(int16_t *mag);
 
 #endif

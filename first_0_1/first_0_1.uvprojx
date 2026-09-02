@@ -695,6 +695,16 @@
           <GroupName>BSP</GroupName>
           <Files>
             <File>
+              <FileName>bsp_board.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\bsp\bsp_board.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_board.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\User\bsp\bsp_board.h</FilePath>
+            </File>
+            <File>
               <FileName>bsp_systick.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\User\bsp\bsp_systick.c</FilePath>
@@ -743,6 +753,16 @@
               <FileName>bsp_mpu6050.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\User\bsp\bsp_mpu6050.h</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_qmc5883l.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\bsp\bsp_qmc5883l.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_qmc5883l.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\User\bsp\bsp_qmc5883l.h</FilePath>
             </File>
             <File>
               <FileName>bsp_ultrasonic.c</FileName>

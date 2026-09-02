@@ -7,6 +7,7 @@
 #define TB_PWM_TIM              TIM2
 #define TB_PWM_CLK              RCC_APB1Periph_TIM2
 #define TB_PWM_PERIOD           7199
+#define TB_PWM_MAX_DUTY         TB_PWM_PERIOD
 
 /* Propulsion TB6612 #1 */
 #define TB1_AIN1_PORT           GPIOB

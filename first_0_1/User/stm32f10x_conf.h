@@ -28,7 +28,7 @@
 
 /* #define USE_FULL_ASSERT  1 */
 
-/* Debug logging: uncomment to enable DBG_PRINT/DBG_STATE/DBG_SENSOR macros */
+/* No spare UART exists: keep DEBUG_ENABLE undefined and debug through SWD. */
 /* #define DEBUG_ENABLE */
 
 #ifdef  USE_FULL_ASSERT

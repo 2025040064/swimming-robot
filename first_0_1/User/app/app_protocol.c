@@ -161,7 +161,7 @@ K230Packet_t *App_Protocol_GetPacket(void)
 
 void App_Protocol_SendAck(void)
 {
-    BSP_USART_SendString("ACK\n");
+    BSP_K230_SendString("ACK\n");
 }
 
 void App_Protocol_SendStatus(const char *state, float pitch, float roll,
@@ -169,10 +169,10 @@ void App_Protocol_SendStatus(const char *state, float pitch, float roll,
 {
     char buf[80];
     BuildStatus(buf, state, pitch, roll, front, left, right);
-    BSP_USART_SendString(buf);
+    BSP_K230_SendString(buf);
 }
 
 void App_Protocol_SendString(const char *str)
 {
-    BSP_USART_SendString((char *)str);
+    BSP_K230_SendString((const char *)str);
 }

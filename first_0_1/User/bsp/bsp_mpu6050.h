@@ -23,7 +23,8 @@
 #define MPU6050_GYRO_ZOUT_H  0x47
 #define MPU6050_GYRO_ZOUT_L  0x48
 
-void BSP_MPU6050_Init(void);
+/* BSP_IIC_Init() must be called once before this shared-bus device is used. */
+uint8_t BSP_MPU6050_Init(void);
 uint8_t BSP_MPU6050_ReadData(int16_t *accel, int16_t *gyro);
 uint8_t BSP_MPU6050_Test(void);
 

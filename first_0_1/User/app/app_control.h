@@ -13,7 +13,7 @@
 /* Deadband: target within +/-20 pixels = straight-ahead, no PID correction */
 #define IMG_DEADBAND    20  //死区 （变大减少微调抖动）
 
-/* Motor speeds (PWM values, range 0~7200) */
+/* Motor speeds (PWM values, range 0~7199) */
 #define CRUISE_SPEED    2500  //巡航速度
 #define APPROACH_SPEED  3000  //接近目标时的速度
 #define TURN_SPEED      2000  //
