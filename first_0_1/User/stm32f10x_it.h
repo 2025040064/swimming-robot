@@ -19,7 +19,7 @@ void MemManage_Handler_C(uint32_t *stack);
 void BusFault_Handler_C(uint32_t *stack);
 void UsageFault_Handler_C(uint32_t *stack);
 
-/* Boot-time fault-marker clear; never writes bytes into K230/GPS UART links. */
+/* Boot-time fault-marker clear; never writes bytes into the K230 UART link. */
 void Crash_ReportAndClear(void);
 
 #endif

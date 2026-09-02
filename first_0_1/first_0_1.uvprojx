@@ -755,16 +755,6 @@
               <FilePath>.\User\bsp\bsp_mpu6050.h</FilePath>
             </File>
             <File>
-              <FileName>bsp_qmc5883l.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\User\bsp\bsp_qmc5883l.c</FilePath>
-            </File>
-            <File>
-              <FileName>bsp_qmc5883l.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\User\bsp\bsp_qmc5883l.h</FilePath>
-            </File>
-            <File>
               <FileName>bsp_ultrasonic.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\User\bsp\bsp_ultrasonic.c</FilePath>

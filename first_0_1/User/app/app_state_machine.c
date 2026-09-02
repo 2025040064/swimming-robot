@@ -254,7 +254,7 @@ void App_SM_Run(void)
         break;
     }
 
-    /* ---- RETURN: return-to-base (reserved for GPS) ---- */
+    /* ---- RETURN: no position sensor fitted, so use a safe stop. ---- */
     case STATE_RETURN:
         App_Ctrl_ReturnBase();
         break;

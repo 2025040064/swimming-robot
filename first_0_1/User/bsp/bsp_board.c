@@ -13,6 +13,6 @@ void BSP_Board_Init(void)
     /* Free PB3/PB4 while preserving the PA13/PA14 SWD debug interface. */
     GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable, ENABLE);
 
-    /* Two pre-emption bits: echo EXTI=0, K230 UART=1, GPS UART=2. */
+    /* Two pre-emption bits: echo EXTI=0, K230 UART=1; PA2/PA3 stay free. */
     NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);
 }

@@ -9,23 +9,23 @@ void DRV_TB6612_Init(void)
     RCC_APB2PeriphClockCmd(TB1_CLK | TB2_CLK, ENABLE);
     RCC_APB1PeriphClockCmd(TB_PWM_CLK, ENABLE);
 
-    /* TB6612#1 direction pins: PB12-15 */
+    /* D153C #1: A channel (left) and B channel (right) direction pins. */
     GPIO_InitStructure.GPIO_Pin  = TB1_AIN1_PIN | TB1_AIN2_PIN | TB1_BIN1_PIN | TB1_BIN2_PIN;
     GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
     GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
     GPIO_Init(GPIOB, &GPIO_InitStructure);
 
-    /* TB6612#1 STBY: PA4 */
+    /* D153C #1 STBY: PA4 */
     GPIO_InitStructure.GPIO_Pin = TB1_STBY_PIN;
     GPIO_Init(GPIOA, &GPIO_InitStructure);
 
-    /* TB6612#2 direction pins */
+    /* D153C #2: A channel (roller) and B channel (conveyor) direction pins. */
     GPIO_InitStructure.GPIO_Pin  = TB2_AIN1_PIN | TB2_AIN2_PIN;
     GPIO_Init(GPIOA, &GPIO_InitStructure);
     GPIO_InitStructure.GPIO_Pin  = TB2_BIN1_PIN | TB2_BIN2_PIN;
     GPIO_Init(GPIOB, &GPIO_InitStructure);
 
-    /* TB6612#2 STBY: PA5 */
+    /* D153C #2 STBY: PA5 */
     GPIO_InitStructure.GPIO_Pin = TB2_STBY_PIN;
     GPIO_Init(GPIOA, &GPIO_InitStructure);
 
@@ -106,21 +106,25 @@ void DRV_TB6612_SetSpeed(uint8_t motor, int16_t speed)
     switch (motor)
     {
     case MOTOR_LEFT:
+        /* D153C #1 channel A, motor connector AO1/AO2. */
         GPIO_WriteBit(TB1_AIN1_PORT, TB1_AIN1_PIN, dir ? Bit_SET : Bit_RESET);
         GPIO_WriteBit(TB1_AIN2_PORT, TB1_AIN2_PIN, dir ? Bit_RESET : Bit_SET);
         TIM_SetCompare1(TB_PWM_TIM, (uint16_t)speed);
         break;
     case MOTOR_RIGHT:
+        /* D153C #1 channel B, motor connector BO1/BO2. */
         GPIO_WriteBit(TB1_BIN1_PORT, TB1_BIN1_PIN, dir ? Bit_SET : Bit_RESET);
         GPIO_WriteBit(TB1_BIN2_PORT, TB1_BIN2_PIN, dir ? Bit_RESET : Bit_SET);
         TIM_SetCompare2(TB_PWM_TIM, (uint16_t)speed);
         break;
     case MOTOR_ROLLER:
+        /* D153C #2 channel A, motor connector AO1/AO2. */
         GPIO_WriteBit(TB2_AIN1_PORT, TB2_AIN1_PIN, dir ? Bit_SET : Bit_RESET);
         GPIO_WriteBit(TB2_AIN2_PORT, TB2_AIN2_PIN, dir ? Bit_RESET : Bit_SET);
         TIM_SetCompare3(TB_PWM_TIM, (uint16_t)speed);
         break;
     case MOTOR_CONVEYOR:
+        /* D153C #2 channel B, motor connector BO1/BO2. */
         GPIO_WriteBit(TB2_BIN1_PORT, TB2_BIN1_PIN, dir ? Bit_SET : Bit_RESET);
         GPIO_WriteBit(TB2_BIN2_PORT, TB2_BIN2_PIN, dir ? Bit_RESET : Bit_SET);
         TIM_SetCompare4(TB_PWM_TIM, (uint16_t)speed);

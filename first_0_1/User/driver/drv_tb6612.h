@@ -9,7 +9,12 @@
 #define TB_PWM_PERIOD           7199
 #define TB_PWM_MAX_DUTY         TB_PWM_PERIOD
 
-/* Propulsion TB6612 #1 */
+/*
+ * D153C #1 (propulsion):
+ * Channel A: AO1/AO2 -> left motor;  PWMA=PA0, AIN1/2=PB12/PB13.
+ * Channel B: BO1/BO2 -> right motor; PWMB=PA1, BIN1/2=PB14/PB15.
+ * STBY=PA4.
+ */
 #define TB1_AIN1_PORT           GPIOB
 #define TB1_AIN1_PIN            GPIO_Pin_12
 #define TB1_AIN2_PORT           GPIOB
@@ -23,7 +28,12 @@
 
 #define TB1_CLK                 RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOB | RCC_APB2Periph_AFIO
 
-/* Recovery TB6612 #2 */
+/*
+ * D153C #2 (recovery mechanism):
+ * Channel A: AO1/AO2 -> roller;    PWMA=PB10, AIN1/2=PA11/PA12.
+ * Channel B: BO1/BO2 -> conveyor; PWMB=PB11, BIN1/2=PB0/PB1.
+ * STBY=PA5.
+ */
 #define TB2_AIN1_PORT           GPIOA
 #define TB2_AIN1_PIN            GPIO_Pin_11
 #define TB2_AIN2_PORT           GPIOA

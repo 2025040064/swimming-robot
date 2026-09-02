@@ -137,10 +137,10 @@ uint8_t App_Ctrl_ApproachTarget(void)
     left  = APPROACH_SPEED - (int16_t)pidX;
     right = APPROACH_SPEED + (int16_t)pidX;
 
-    if (left  > 7199) left  = 7199;
-    if (left  < -7199) left  = -7199;
-    if (right > 7199) right = 7199;
-    if (right < -7199) right = -7199;
+    if (left  > TB_PWM_MAX_DUTY) left  = TB_PWM_MAX_DUTY;
+    if (left  < -TB_PWM_MAX_DUTY) left  = -TB_PWM_MAX_DUTY;
+    if (right > TB_PWM_MAX_DUTY) right = TB_PWM_MAX_DUTY;
+    if (right < -TB_PWM_MAX_DUTY) right = -TB_PWM_MAX_DUTY;
 
     App_Ctrl_UpdateMotors(left, right);
     return 1;
@@ -179,7 +179,7 @@ void App_Ctrl_StopAll(void)
 
 void App_Ctrl_ReturnBase(void)
 {
-    /* Reserved: will use GPS + compass to navigate home */
+    /* No position sensor is installed; returning home must remain a safe stop. */
     DRV_TB6612_StopAll();
 }
 

@@ -1,5 +1,5 @@
 /*
- * Hardware I2C1 master for the shared MPU6050/QMC5883L bus.
+ * Hardware I2C1 master for the MPU6050 bus. A future I2C sensor may share it.
  *
  * BSP_Board_Init() applies GPIO_Remap_I2C1 before this module configures
  * PB8/PB9 as AF open-drain. Transactions use unshifted 7-bit addresses;

@@ -8,8 +8,8 @@
  *   3. Trigger system reset via NVIC immediately.
  *
  * After reset, Crash_ReportAndClear() clears the fault signature without using
- * a UART. USART1 is reserved for the K230 protocol and USART2 for GPS, so
- * unsolicited crash text must not be injected into either device link.
+ * a UART. USART1 is reserved for the K230 protocol, so unsolicited crash text
+ * must not be injected into that device link.
  *
  * NOTE: the reset must be immediate — a fault handler runs at a higher
  * exception priority than SysTick, so any SysTick-based delay would hang.
@@ -47,7 +47,7 @@ static void Crash_Reset(void)
     NVIC_SystemReset();
 }
 
-/* Called once at boot. Keep dedicated K230/GPS links protocol-clean. */
+/* Called once at boot. Keep the K230 link protocol-clean. */
 void Crash_ReportAndClear(void)
 {
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_BKP | RCC_APB1Periph_PWR, ENABLE);

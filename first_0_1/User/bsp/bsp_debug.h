@@ -4,8 +4,8 @@
 #include "stm32f10x.h"
 
 /*
- * USART1 is exclusively K230 and USART2 is exclusively GPS. Neither link may
- * carry printf text. Use the retained SWD interface for interactive debugging.
+ * USART1 is exclusively the K230 protocol and must not carry printf text.
+ * PA2/PA3 are free because this build has no GPS. Use SWD for debugging.
  */
 #ifdef DEBUG_ENABLE
 #error "DEBUG_ENABLE has no dedicated UART on this board; use SWD debugging instead."
