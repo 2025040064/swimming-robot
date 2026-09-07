@@ -799,6 +799,16 @@
               <FileType>5</FileType>
               <FilePath>.\User\driver\drv_tb6612.h</FilePath>
             </File>
+            <File>
+              <FileName>tast_dianji.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\tast_dianji.c</FilePath>
+            </File>
+            <File>
+              <FileName>tast_dianji.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\tast_dianji.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
