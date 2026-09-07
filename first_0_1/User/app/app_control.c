@@ -22,6 +22,8 @@ static uint8_t  g_targetValid     = 0;
 static uint32_t g_targetTimestamp = 0;
 static uint32_t g_cruisePhase     = 0;
 static uint32_t g_lastCruiseTick  = 0;
+static int16_t g_cruiseLeftTarget  = 0;
+static int16_t g_cruiseRightTarget = 0;
 
 /* Ramp state: current vs target for left/right motors */
 static int16_t g_rampLeft  = 0;
@@ -38,6 +40,8 @@ void App_Ctrl_Init(void)
     g_targetValid = 0;
     g_cruisePhase = 0;
     g_lastCruiseTick = 0;
+    g_cruiseLeftTarget = 0;
+    g_cruiseRightTarget = 0;
     g_rampLeft = 0;
     g_rampRight = 0;
 }
@@ -75,25 +79,37 @@ void App_Ctrl_UpdateMotors(int16_t left, int16_t right)
 void App_Ctrl_SearchCruise(void)
 {
     uint32_t now = BSP_GetTick();
-    if (now - g_lastCruiseTick < 2000) return;
-    g_lastCruiseTick = now;
 
-    switch (g_cruisePhase & 0x03)
+    /* Change the serpentine direction only every two seconds. */
+    if (now - g_lastCruiseTick >= 2000)
     {
-    case 0:
-        App_Ctrl_UpdateMotors(CRUISE_SPEED, CRUISE_SPEED);
-        break;
-    case 1:
-        App_Ctrl_UpdateMotors(CRUISE_SPEED + 1000, CRUISE_SPEED - 500);
-        break;
-    case 2:
-        App_Ctrl_UpdateMotors(CRUISE_SPEED, CRUISE_SPEED);
-        break;
-    case 3:
-        App_Ctrl_UpdateMotors(CRUISE_SPEED - 500, CRUISE_SPEED + 1000);
-        break;
+        g_lastCruiseTick = now;
+
+        switch (g_cruisePhase & 0x03)
+        {
+        case 0:
+            g_cruiseLeftTarget = CRUISE_SPEED;
+            g_cruiseRightTarget = CRUISE_SPEED;
+            break;
+        case 1:
+            g_cruiseLeftTarget = CRUISE_SPEED + 1000;
+            g_cruiseRightTarget = CRUISE_SPEED - 500;
+            break;
+        case 2:
+            g_cruiseLeftTarget = CRUISE_SPEED;
+            g_cruiseRightTarget = CRUISE_SPEED;
+            break;
+        default:
+            g_cruiseLeftTarget = CRUISE_SPEED - 500;
+            g_cruiseRightTarget = CRUISE_SPEED + 1000;
+            break;
+        }
+        g_cruisePhase++;
     }
-    g_cruisePhase++;
+
+    /* App_SM_Run calls this every 20 ms: keep advancing the PWM ramp toward
+     * the selected target instead of advancing it only once every two seconds. */
+    App_Ctrl_UpdateMotors(g_cruiseLeftTarget, g_cruiseRightTarget);
 }
 
 uint8_t App_Ctrl_ApproachTarget(void)
@@ -205,6 +221,12 @@ void App_Ctrl_OnStateChange(RobotState_t newState)
     {
     case STATE_INIT:
     case STATE_SEARCH:
+        g_cruisePhase = 0;
+        g_lastCruiseTick = 0;
+        g_cruiseLeftTarget = 0;
+        g_cruiseRightTarget = 0;
+        g_targetValid = 0;
+        break;
     case STATE_COLLECT:
     case STATE_AVOID:
     case STATE_RETURN:

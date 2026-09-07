@@ -1,0 +1,23 @@
+---
+description: Preserve versioned hardware pin-assignment tables and never overwrite prior wiring records.
+alwaysApply: true
+---
+
+# Hardware Pin Table Versioning
+
+- The currently confirmed extension-board wiring is the baseline: 引脚表 V1.
+  The next physical wiring change must create 引脚表 V2.
+- Treat every published pin-assignment table as an immutable hardware record.
+- Never edit, rename, or delete an existing table when a wiring change is requested.
+- For each wiring change, add a new table with the next sequential identifier:
+  引脚表 V1, 引脚表 V2, 引脚表 V3, and so on.
+- Add the date, a short reason for the change, and a complete mapping for the
+  changed peripherals to every new table.
+- Clearly mark exactly one table as 当前生效 and label all earlier tables as
+  历史记录.
+- When firmware pins change, update the source pin macros, the hardware wiring
+  document, and the README together. State the current table identifier in each.
+- Do not silently reuse a pin from an earlier table. Record the old assignment
+  and the new assignment in the new table.
+- Before implementation, verify that the requested hardware change names the
+  new table identifier; if absent, create the next table first.

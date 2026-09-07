@@ -1,14 +1,16 @@
 /**
- * Ultrasonic driver for 3x AJ-SRP04M sensors, using microsecond-level timing.
+ * Ultrasonic driver for 3x AJ-SR04M sensors in manual mode 1 (Trig/Echo),
+ * using microsecond-level timing.
  *
  * Timing: TIM3 runs as a free-running 1MHz (1 us/tick) counter. The Echo pins
  * (PA7/EXTI7, PB6/EXTI6, PB4/EXTI4) trigger EXTI interrupts on BOTH edges:
  *   - rising edge  -> record TIM3->CNT as the echo start
- *   - falling edge -> delta_us * 0.017 = distance in cm
+ *   - falling edge -> delta_us / 58 = distance in cm (AJ-SR04M manual)
  *
  * A round-robin scheduler fires one sensor at a time (one Trig pulse per
  * ~60 ms) so the three sensors never echo over each other. Each sensor has a
- * 30 ms timeout: if no echo arrives, it is marked invalid and reads 999.0 cm.
+ * 50 ms timeout, sufficient for the manual's 8 m maximum range: if no echo
+ * arrives, it is marked invalid and reads 999.0 cm.
  *
  * A reading is "valid" only if the last echo succeeded AND it is not stale
  * (see BSP_Ultrasonic_IsValid). 999.0 cm is "no echo", not "clear ahead".
@@ -50,13 +52,13 @@ static void delay_us(uint16_t us)
     while ((uint16_t)(US_TIM->CNT - start) < us) { }
 }
 
-/* ---- 10 us Trigger pulse ---- */
+/* ---- AJ-SR04M mode-1 Trigger pulse: low briefly, then >= 10 us high ---- */
 static void TriggerPulse(US_Sensor_t *s)
 {
     GPIO_ResetBits(s->trigPort, s->trigPin);
-    delay_us(2);
+    delay_us(US_TRIG_LOW_US);
     GPIO_SetBits(s->trigPort, s->trigPin);
-    delay_us(10);
+    delay_us(US_TRIG_PULSE_US);
     GPIO_ResetBits(s->trigPort, s->trigPin);
 }
 
@@ -89,10 +91,22 @@ static void US_CaptureEdge(US_Sensor_t *s, uint32_t now)
     else if (s->echoHigh)   /* falling edge after a rising edge: pulse done */
     {
         uint16_t elapsed = (uint16_t)(US_TIM->CNT - s->echoStartUs);
-        float d = (float)elapsed * 0.017f;   /* cm (340 m/s, round trip) */
+        float d = (float)elapsed / US_ECHO_US_PER_CM;
 
+        /* The manual's 20 cm blind zone is not resolvable; report it as the
+         * nearest safe distance so obstacle thresholds remain conservative. */
         if (d < US_MIN_DIST_CM) d = US_MIN_DIST_CM;
-        if (d > US_MAX_DIST_CM) d = US_MAX_DIST_CM;
+
+        /* A pulse beyond the manual's 8 m range is not a usable measurement.
+         * Treat it as a missing echo, never as a clear path. */
+        if (d > US_MAX_DIST_CM)
+        {
+            s->distance  = US_NO_ECHO;
+            s->valid     = 0;
+            s->measuring = 0;
+            s->echoHigh  = 0;
+            return;
+        }
 
         s->distance       = d;
         s->valid          = 1;
@@ -244,14 +258,14 @@ void EXTI9_5_IRQHandler(void)
 
 float BSP_Ultrasonic_GetDistance(uint8_t sensor)
 {
-    if (sensor < 3)
+    if ((sensor < 3) && BSP_Ultrasonic_IsValid(sensor))
         return g_sensors[sensor].distance;
     return US_NO_ECHO;
 }
 
-float BSP_Ultrasonic_GetFront(void) { return g_sensors[0].distance; }
-float BSP_Ultrasonic_GetLeft(void)  { return g_sensors[1].distance; }
-float BSP_Ultrasonic_GetRight(void) { return g_sensors[2].distance; }
+float BSP_Ultrasonic_GetFront(void) { return BSP_Ultrasonic_GetDistance(US_FRONT); }
+float BSP_Ultrasonic_GetLeft(void)  { return BSP_Ultrasonic_GetDistance(US_LEFT); }
+float BSP_Ultrasonic_GetRight(void) { return BSP_Ultrasonic_GetDistance(US_RIGHT); }
 
 uint8_t BSP_Ultrasonic_IsValid(uint8_t sensor)
 {

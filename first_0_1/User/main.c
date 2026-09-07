@@ -24,6 +24,16 @@
 #define IWDG_PRESCALER   IWDG_Prescaler_64
 #define IWDG_RELOAD_VAL  ((IWDG_TIMEOUT_MS * 625U) / 1000U)
 
+/*
+ * Standalone propulsion test. Leave disabled for normal robot operation.
+ * When enabled, only the board, SysTick, LED and TB6612 are initialized;
+ * both propulsion motors run at MOTOR_TEST_SPEED for MOTOR_TEST_DURATION_MS,
+ * then stop. Secure the robot before enabling this test.
+ */
+#define MOTOR_TEST_ENABLE       0
+#define MOTOR_TEST_SPEED        3500
+#define MOTOR_TEST_DURATION_MS  5000U
+
 static void IWDG_Init(void)
 {
     DBGMCU_Config(DBGMCU_IWDG_STOP, ENABLE);
@@ -39,12 +49,40 @@ static void IWDG_Feed(void)
     IWDG_ReloadCounter();
 }
 
+#if MOTOR_TEST_ENABLE
+static void Motor_Test_Run(void)
+{
+    uint32_t startTick = BSP_GetTick();
+
+    DRV_TB6612_SetSpeed(MOTOR_LEFT, MOTOR_TEST_SPEED);
+    DRV_TB6612_SetSpeed(MOTOR_RIGHT, MOTOR_TEST_SPEED);
+
+    while ((BSP_GetTick() - startTick) < MOTOR_TEST_DURATION_MS)
+    {
+        __WFI();
+    }
+
+    DRV_TB6612_StopAll();
+    BSP_LED_On();  /* Test complete: stay here with motors stopped. */
+    while (1)
+    {
+        __WFI();
+    }
+}
+#endif
+
 int main(void)
 {
     SystemCoreClockUpdate();
     BSP_Board_Init();
     BSP_SysTick_Init();
     BSP_LED_Init();
+
+#if MOTOR_TEST_ENABLE
+    DRV_TB6612_Init();
+    Motor_Test_Run();
+#endif
+
     BSP_K230_Init(K230_DEFAULT_BAUDRATE);
     Crash_ReportAndClear();
     BSP_Ultrasonic_Init();

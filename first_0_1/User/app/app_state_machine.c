@@ -108,11 +108,15 @@ void App_SM_Run(void)
                  */
                 uint8_t phase = App_Ctrl_GetCruisePhase();
 
-                if (phase == 1 && BSP_Ultrasonic_GetRight() < 60.0f)
+                if (phase == 1 &&
+                    (!BSP_Ultrasonic_IsValid(US_RIGHT) ||
+                     BSP_Ultrasonic_GetRight() < 60.0f))
                 {
                     App_Ctrl_UpdateMotors(CRUISE_SPEED, CRUISE_SPEED);
                 }
-                else if (phase == 3 && BSP_Ultrasonic_GetLeft() < 60.0f)
+                else if (phase == 3 &&
+                         (!BSP_Ultrasonic_IsValid(US_LEFT) ||
+                          BSP_Ultrasonic_GetLeft() < 60.0f))
                 {
                     App_Ctrl_UpdateMotors(CRUISE_SPEED, CRUISE_SPEED);
                 }
@@ -216,8 +220,20 @@ void App_SM_Run(void)
         {
             float leftDist  = BSP_Ultrasonic_GetLeft();
             float rightDist = BSP_Ultrasonic_GetRight();
-            g_avoidDir = (leftDist > rightDist) ? 1 : 2;
-            App_Ctrl_AvoidTurn(g_avoidDir);
+            uint8_t leftValid = BSP_Ultrasonic_IsValid(US_LEFT);
+            uint8_t rightValid = BSP_Ultrasonic_IsValid(US_RIGHT);
+
+            if (!leftValid && !rightValid)
+            {
+                /* No measured turning direction: do not turn blindly. */
+                App_Ctrl_StopAll();
+            }
+            else
+            {
+                /* Prefer a valid side. Compare distances only when both are valid. */
+                g_avoidDir = (leftValid && (!rightValid || leftDist > rightDist)) ? 1 : 2;
+                App_Ctrl_AvoidTurn(g_avoidDir);
+            }
         }
 
         /*
@@ -228,7 +244,8 @@ void App_SM_Run(void)
          */
         if (elapsed > 500)
         {
-            if (BSP_Ultrasonic_GetFront() > 80.0f)
+            if (BSP_Ultrasonic_IsValid(US_FRONT) &&
+                BSP_Ultrasonic_GetFront() > 80.0f)
             {
                 g_avoidClearCnt++;
                 if (g_avoidClearCnt >= 3)

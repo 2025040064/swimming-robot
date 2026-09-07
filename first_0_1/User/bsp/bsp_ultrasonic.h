@@ -7,18 +7,25 @@
 #define US_LEFT     1
 #define US_RIGHT    2
 
-/* Distance limits (cm). 999.0f means "no echo / timeout" — NOT "clear ahead". */
-#define US_MIN_DIST_CM       2.0f
-#define US_MAX_DIST_CM       400.0f
+/* AJ-SR04M manual: 20 cm blind zone and 8 m maximum range. */
+#define US_MIN_DIST_CM       20.0f
+#define US_MAX_DIST_CM       800.0f
 #define US_NO_ECHO           999.0f
+
+/* AJ-SR04M manual: distance_cm = Echo_high_time_us / 58. */
+#define US_ECHO_US_PER_CM    58.0f
+
+/* AJ-SR04M mode 1: keep Trig low briefly, then high for at least 10 us. */
+#define US_TRIG_LOW_US       2u
+#define US_TRIG_PULSE_US     10u
 
 /* A reading older than this is considered invalid / stale. */
 #define US_STALE_MS          2000
 
-/* Round-robin trigger interval (ms) and per-sensor echo timeout (ms).
- * Max echo ~400cm => ~23.5ms round trip, so 30ms is a safe timeout. */
+/* 8 m takes 46.4 ms at the manual's 58 us/cm conversion. The 60 ms
+ * round-robin slot keeps each 50 ms measurement window separate. */
 #define US_TRIG_INTERVAL_MS  60
-#define US_ECHO_TIMEOUT_MS   30
+#define US_ECHO_TIMEOUT_MS   50
 
 /* Front: Trig=PA6, Echo=PA7 (EXTI7) */
 #define US_F_TRIG_PORT   GPIOA
@@ -40,6 +47,7 @@
 
 void BSP_Ultrasonic_Init(void);
 void BSP_Ultrasonic_Update(void);
+/* Returns a current valid distance in cm, otherwise US_NO_ECHO. */
 float BSP_Ultrasonic_GetDistance(uint8_t sensor);
 float BSP_Ultrasonic_GetFront(void);
 float BSP_Ultrasonic_GetLeft(void);
