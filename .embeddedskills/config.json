@@ -1,0 +1,7 @@
+{
+  "keil": {
+    "project": "first_0_1/first_0_1.uvprojx",
+    "target": "Target 1",
+    "log_dir": ".embeddedskills/build"
+  }
+}

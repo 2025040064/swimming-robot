@@ -6,6 +6,11 @@
 #define MPU6050_ADDR    0x68
 
 #define MPU6050_PWR_MGMT1   0x6B
+#define MPU6050_PWR_MGMT2   0x6C
+
+/* Device-level errors; I2C transport errors retain their BSP_IIC values. */
+#define MPU6050_ERR_VERIFY  0x80U
+#define MPU6050_ERR_NO_DATA 0x81U
 #define MPU6050_SMPLRT_DIV  0x19
 #define MPU6050_CONFIG      0x1A
 #define MPU6050_GYRO_CONFIG 0x1B
@@ -24,6 +29,16 @@
 #define MPU6050_GYRO_ZOUT_L  0x48
 
 /* BSP_IIC_Init() must be called once before this shared-bus device is used. */
+typedef struct
+{
+    int16_t accel[3];
+    int16_t gyro[3];
+    uint32_t sampleTick;
+    uint8_t readStatus;
+    uint8_t hasSample;
+} MPU6050_Data_t;
+
+const MPU6050_Data_t *BSP_MPU6050_GetLatest(void);
 uint8_t BSP_MPU6050_Init(void);
 uint8_t BSP_MPU6050_ReadData(int16_t *accel, int16_t *gyro);
 uint8_t BSP_MPU6050_Test(void);

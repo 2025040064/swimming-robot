@@ -46,6 +46,10 @@ typedef struct
     float gyroOffsetZ;
 } Attitude_t;
 
+uint16_t Algo_Filter_GetCalibCount(void);
+uint8_t Algo_Filter_SampleValid(void);
+uint8_t Algo_Filter_IsReady(void);
+float Algo_Filter_GetTilt(void);
 void Algo_Filter_Init(void);
 void Algo_Filter_Update(int16_t *accel, int16_t *gyro, float dt);
 void Algo_Filter_StartCalibration(void);

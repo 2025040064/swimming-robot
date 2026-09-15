@@ -7,9 +7,10 @@ static volatile uint8_t g_packetReady = 0;
 
 static uint8_t g_rxBuf[PROTO_BUF_SIZE];
 static uint8_t g_rxIdx = 0;
+static uint8_t g_rxDiscard = 0U;
 
 /* Manual TRASH,x,y parser — no sscanf dependency */
-static void ParseTrash(char *str, int16_t *x, int16_t *y)
+static uint8_t ParseTrash(char *str, int16_t *x, int16_t *y)
 {
     char *p = str + 6; /* skip "TRASH," */
     int32_t val;
@@ -19,23 +20,50 @@ static void ParseTrash(char *str, int16_t *x, int16_t *y)
     sign = 1;
     if (*p == '-') { sign = -1; p++; }
     val = 0;
-    while (*p >= '0' && *p <= '9') { val = val * 10 + (*p - '0'); p++; }
+    if (*p < '0' || *p > '9') return 0U;
+    while (*p >= '0' && *p <= '9')
+    {
+        val = val * 10 + (*p - '0');
+        if (val > PROTO_IMG_MAX_X) return 0U;
+        p++;
+    }
     *x = (int16_t)(sign * val);
 
-    if (*p == ',') p++;
+    if (*p != ',') return 0U;
+    p++;
 
     /* Parse y */
     sign = 1;
     if (*p == '-') { sign = -1; p++; }
     val = 0;
-    while (*p >= '0' && *p <= '9') { val = val * 10 + (*p - '0'); p++; }
+    if (*p < '0' || *p > '9') return 0U;
+    while (*p >= '0' && *p <= '9')
+    {
+        val = val * 10 + (*p - '0');
+        if (val > PROTO_IMG_MAX_Y) return 0U;
+        p++;
+    }
     *y = (int16_t)(sign * val);
+    return *p == '\0';
 }
 
 /* Lightweight float-to-int for telemetry: keep 1 decimal digit */
 static int32_t FloatToInt1(float f)
 {
     return (int32_t)(f * 10.0f);
+}
+
+static uint8_t AppendTenths(char *buf, uint8_t idx, int32_t value)
+{
+    uint32_t whole;
+    if (value < 0) { buf[idx++] = '-'; value = -value; }
+    whole = (uint32_t)value / 10U;
+    if (whole >= 100U) buf[idx++] = (char)('0' + whole / 100U);
+    if (whole >= 10U) buf[idx++] = (char)('0' + (whole / 10U) % 10U);
+    buf[idx++] = (char)('0' + whole % 10U);
+    buf[idx++] = '.';
+    buf[idx++] = (char)('0' + (uint32_t)value % 10U);
+    return idx;
 }
 
 static void BuildStatus(char *buf, const char *state, float pitch, float roll,
@@ -56,16 +84,12 @@ static void BuildStatus(char *buf, const char *state, float pitch, float roll,
 
     /* pitch * 10 */
     ip = FloatToInt1(pitch);
-    if (ip < 0) { buf[idx++] = '-'; ip = -ip; }
-    buf[idx++] = '0' + (ip / 10); buf[idx++] = '.';
-    buf[idx++] = '0' + (ip % 10);
+    idx = AppendTenths(buf, idx, ip);
     buf[idx++] = ',';
 
     /* roll * 10 */
     ir = FloatToInt1(roll);
-    if (ir < 0) { buf[idx++] = '-'; ir = -ir; }
-    buf[idx++] = '0' + (ir / 10); buf[idx++] = '.';
-    buf[idx++] = '0' + (ir % 10);
+    idx = AppendTenths(buf, idx, ir);
     buf[idx++] = ',';
 
     /* front (integer cm) */
@@ -100,12 +124,21 @@ void App_Protocol_Init(void)
     memset(&g_packet, 0, sizeof(g_packet));
     g_packetReady = 0;
     g_rxIdx = 0;
+    g_rxDiscard = 0U;
 }
 
 void App_Protocol_ParseByte(uint8_t ch)
 {
+    int16_t x, y;
+    uint8_t parsed;
     if (ch == '\n' || ch == '\r')
     {
+        if (g_rxDiscard)
+        {
+            g_rxDiscard = 0U;
+            g_rxIdx = 0U;
+            return;
+        }
         if (g_rxIdx > 0)
         {
             g_rxBuf[g_rxIdx] = '\0';
@@ -115,14 +148,18 @@ void App_Protocol_ParseByte(uint8_t ch)
 
             if (strncmp((char *)g_packet.raw, "TRASH,", 6) == 0)
             {
-                ParseTrash((char *)g_packet.raw, &g_packet.x, &g_packet.y);
+                x = 0;
+                y = 0;
+                parsed = ParseTrash((char *)g_packet.raw, &x, &y);
 
                 /* Validate coordinates: the K230 frame is 640x640, so a valid
                  * target must be within [0,639] on both axes. Reject out-of-range
                  * / malformed frames instead of generating a bogus target. */
-                if (g_packet.x >= 0 && g_packet.x <= PROTO_IMG_MAX_X &&
-                    g_packet.y >= 0 && g_packet.y <= PROTO_IMG_MAX_Y)
+                if (parsed && x >= 0 && x <= PROTO_IMG_MAX_X &&
+                    y >= 0 && y <= PROTO_IMG_MAX_Y)
                 {
+                    g_packet.x = x;
+                    g_packet.y = y;
                     g_packet.type = PKT_TRASH;
                     g_packetReady = 1;
                 }
@@ -141,10 +178,13 @@ void App_Protocol_ParseByte(uint8_t ch)
     }
     else
     {
+        if (g_rxDiscard) return;
         if (g_rxIdx < PROTO_BUF_SIZE - 1)
         {
             g_rxBuf[g_rxIdx++] = ch;
         }
+        else
+            g_rxDiscard = 1U;
     }
 }
 

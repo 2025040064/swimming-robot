@@ -12,9 +12,15 @@ typedef enum
     STATE_COLLECT,
     STATE_AVOID,
     STATE_RETURN,
+    STATE_TILT_STOP,
+    STATE_IMU_STOP,
+    STATE_RANGE_HOLD,
+    STATE_IMU_TEST,
+    STATE_TEST_DONE,
     STATE_COUNT
 } RobotState_t;
 
+void App_SM_SetState(RobotState_t newState, uint32_t timeoutMs);
 void App_SM_Init(void);
 void App_SM_Run(void);
 RobotState_t App_SM_GetState(void);

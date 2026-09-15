@@ -1,4 +1,5 @@
 #include "app_state_machine.h"
+#include "robot_config.h"
 #include "app_control.h"
 #include "app_protocol.h"
 #include "bsp_ultrasonic.h"
@@ -12,7 +13,8 @@ static uint32_t g_stateTimeout = 0;
 
 static const char *g_stateNames[] =
 {
-    "INIT", "SEARCH", "DETECT", "APPROACH", "COLLECT", "AVOID", "RETURN"
+    "INIT", "SEARCH", "DETECT", "APPROACH", "COLLECT", "AVOID", "RETURN",
+    "TILT_STOP", "IMU_STOP", "RANGE_HOLD", "IMU_TEST", "TEST_DONE"
 };
 
 static uint8_t  g_avoidDir = 0;
@@ -30,6 +32,8 @@ void App_SM_Init(void)
 
 void App_SM_SetState(RobotState_t newState, uint32_t timeoutMs)
 {
+    if (g_state == STATE_TILT_STOP || g_state == STATE_IMU_STOP)
+        return;
     g_state = newState;
     g_stateEnterTick = BSP_GetTick();
     g_stateTimeout = timeoutMs;
@@ -45,13 +49,37 @@ void App_SM_Run(void)
 {
     uint8_t packetReady = App_Protocol_PacketReady();
     K230Packet_t *pkt;
+    RobotState_t safetyState = App_Ctrl_GetSafetyState();
+
+    if (safetyState == STATE_TILT_STOP || safetyState == STATE_IMU_STOP)
+    {
+        if (g_state != safetyState) App_SM_SetState(safetyState, 0U);
+        App_Ctrl_StopAll();
+        BSP_LED_On();
+        return;
+    }
+#if ROBOT_IMU_MOTOR_TEST_ENABLE
+    if (g_state != STATE_INIT)
+    {
+        BSP_MpuMotorTest_Run();
+        return;
+    }
+#endif
+    if (g_state != STATE_INIT && !ROBOT_RANGING_VALIDATED)
+    {
+        if (g_state != STATE_RANGE_HOLD) App_SM_SetState(STATE_RANGE_HOLD, 0U);
+        App_Ctrl_StopAll();
+        BSP_Ultrasonic_Update();
+        return;
+    }
 
     switch (g_state)
     {
     /* ---- INIT: sensor calibration, gyro bias ---- */
     case STATE_INIT:
         BSP_LED_On();
-        if (SM_Timeout())
+        if (SM_Timeout() &&
+            Algo_Filter_GetCalibCount() >= ROBOT_IMU_MIN_CALIB_SAMPLES)
         {
             Algo_Filter_FinishCalibration();  /* compute gyro offsets */
             App_SM_SetState(STATE_SEARCH, 0);
@@ -68,7 +96,7 @@ void App_SM_Run(void)
          * readings before triggering AVOID, to avoid re-entering
          * immediately after a rotation-only exit.
          */
-        if (BSP_Ultrasonic_GetFront() < 50.0f)
+        if (BSP_Ultrasonic_GetFront() < ROBOT_FRONT_AVOID_CM)
         {
             g_searchBlockCnt++;
             if (g_searchBlockCnt >= 2)
@@ -132,7 +160,7 @@ void App_SM_Run(void)
     case STATE_DETECT:
         BSP_Ultrasonic_Update();
 
-        if (BSP_Ultrasonic_GetFront() < 50.0f)
+        if (BSP_Ultrasonic_GetFront() < ROBOT_FRONT_AVOID_CM)
         {
             App_SM_SetState(STATE_AVOID, 3000);
         }
@@ -162,11 +190,7 @@ void App_SM_Run(void)
             App_Ctrl_StopAll();
             App_SM_SetState(STATE_SEARCH, 0);
         }
-        else if (BSP_Ultrasonic_GetFront() < 30.0f)
-        {
-            App_SM_SetState(STATE_COLLECT, 5000);
-        }
-        else if (BSP_Ultrasonic_GetFront() < 50.0f)
+        else if (BSP_Ultrasonic_GetFront() < ROBOT_FRONT_AVOID_CM)
         {
             App_SM_SetState(STATE_AVOID, 3000);
         }
@@ -199,14 +223,11 @@ void App_SM_Run(void)
         }
         break;
 
+    /* Historical label below; collection now uses the passive net only. */
     /* ---- COLLECT: activate roller + conveyor ---- */
     case STATE_COLLECT:
-        App_Ctrl_StartCollection();
-        if (SM_Timeout())
-        {
-            App_Ctrl_StopCollection();
-            App_SM_SetState(STATE_SEARCH, 0);
-        }
+        App_Ctrl_StopAll();
+        App_SM_SetState(STATE_SEARCH, 0U);
         break;
 
     /* ---- AVOID: turn toward open direction with debounced early-exit ---- */
@@ -223,7 +244,9 @@ void App_SM_Run(void)
             uint8_t leftValid = BSP_Ultrasonic_IsValid(US_LEFT);
             uint8_t rightValid = BSP_Ultrasonic_IsValid(US_RIGHT);
 
-            if (!leftValid && !rightValid)
+            leftValid = leftValid && (leftDist >= ROBOT_SIDE_AVOID_CM);
+            rightValid = rightValid && (rightDist >= ROBOT_SIDE_AVOID_CM);
+            if (!BSP_Ultrasonic_IsValid(US_FRONT) || (!leftValid && !rightValid))
             {
                 /* No measured turning direction: do not turn blindly. */
                 App_Ctrl_StopAll();
@@ -245,7 +268,7 @@ void App_SM_Run(void)
         if (elapsed > 500)
         {
             if (BSP_Ultrasonic_IsValid(US_FRONT) &&
-                BSP_Ultrasonic_GetFront() > 80.0f)
+                BSP_Ultrasonic_GetFront() > ROBOT_AVOID_CLEAR_CM)
             {
                 g_avoidClearCnt++;
                 if (g_avoidClearCnt >= 3)

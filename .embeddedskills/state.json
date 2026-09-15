@@ -1,0 +1,24 @@
+{
+  "last_build": {
+    "provider": "keil",
+    "action": "build",
+    "project": "first_0_1/first_0_1.uvprojx",
+    "target": "Target 1",
+    "log_dir": ".embeddedskills/build",
+    "artifacts": {
+      "axf_file": "first_0_1/Objects/first_0_1.axf",
+      "hex_file": "first_0_1/Objects/first_0_1.hex",
+      "flash_file": "first_0_1/Objects/first_0_1.hex",
+      "debug_file": "first_0_1/Objects/first_0_1.axf",
+      "output_dir": "first_0_1/Objects",
+      "log_file": ".embeddedskills/build/first_0_1-Target 1-build.log"
+    },
+    "axf_file": "first_0_1/Objects/first_0_1.axf",
+    "hex_file": "first_0_1/Objects/first_0_1.hex",
+    "flash_file": "first_0_1/Objects/first_0_1.hex",
+    "debug_file": "first_0_1/Objects/first_0_1.axf",
+    "output_dir": "first_0_1/Objects",
+    "log_file": ".embeddedskills/build/first_0_1-Target 1-build.log",
+    "timestamp": "2026-09-11T18:30:42+08:00"
+  }
+}

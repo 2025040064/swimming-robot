@@ -28,34 +28,27 @@
 
 #define TB1_CLK                 RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOB | RCC_APB2Periph_AFIO
 
+/* Historical recovery connector notes; only the STBY low clamp remains. */
 /*
  * D153C #2 (recovery mechanism):
  * Channel A: AO1/AO2 -> roller;    PWMA=PB10, AIN1/2=PA11/PA12.
  * Channel B: BO1/BO2 -> conveyor; PWMB=PB11, BIN1/2=PB0/PB1.
  * STBY=PA5.
  */
-#define TB2_AIN1_PORT           GPIOA
-#define TB2_AIN1_PIN            GPIO_Pin_11
-#define TB2_AIN2_PORT           GPIOA
-#define TB2_AIN2_PIN            GPIO_Pin_12
-#define TB2_BIN1_PORT           GPIOB
-#define TB2_BIN1_PIN            GPIO_Pin_0
-#define TB2_BIN2_PORT           GPIOB
-#define TB2_BIN2_PIN            GPIO_Pin_1
 #define TB2_STBY_PORT           GPIOA
 #define TB2_STBY_PIN            GPIO_Pin_5
 
-#define TB2_CLK                 RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOB | RCC_APB2Periph_AFIO
 
 /* Motor IDs */
 #define MOTOR_LEFT              0
 #define MOTOR_RIGHT             1
-#define MOTOR_ROLLER            2
-#define MOTOR_CONVEYOR          3
 
 void DRV_TB6612_Init(void);
 void DRV_TB6612_SetSpeed(uint8_t motor, int16_t speed);
 void DRV_TB6612_SetStandby(uint8_t tbNum, uint8_t state);
 void DRV_TB6612_StopAll(void);
+void DRV_TB6612_RunDirectionDiagnostic(int16_t speed);
+uint8_t DRV_TB6612_GetDirectionOutput(void);
+uint8_t DRV_TB6612_GetDirectionInput(void);
 
 #endif

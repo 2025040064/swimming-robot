@@ -7,8 +7,14 @@
  */
 
 #include "bsp_iic.h"
+#include "Delay.h"
 
 #define IIC_TIMEOUT_LOOPS       100000UL
+
+/* Last recovery: 0=not attempted, 1=OK, 2=GPIO level failed, 3=BUSY remained.
+ * Lines at recovery entry: bit 0=SCL high, bit 1=SDA high. */
+volatile uint32_t g_debugIicRecovery;
+volatile uint32_t g_debugIicLines;
 
 static void IIC_ConfigPeripheral(void)
 {
@@ -25,6 +31,76 @@ static void IIC_ConfigPeripheral(void)
     I2C_AcknowledgeConfig(IIC_PERIPH, ENABLE);
     I2C_NACKPositionConfig(IIC_PERIPH, I2C_NACKPosition_Current);
     I2C_Cmd(IIC_PERIPH, ENABLE);
+}
+
+static uint8_t IIC_WaitPins(uint16_t pins, uint16_t levels)
+{
+    uint32_t timeout = IIC_TIMEOUT_LOOPS;
+    while ((GPIO_ReadInputData(IIC_GPIO_PORT) & pins) != levels)
+    {
+        if (--timeout == 0U) return BSP_IIC_ERR_BUSY;
+    }
+    return BSP_IIC_OK;
+}
+
+/* STM32F103x8/B ES096 Rev 15, section 2.8.7.
+ * Single-master bus: force both filter inputs through verified transitions.
+ * Open-drain outputs only release the high level; a held-low line fails. */
+static uint8_t IIC_UnlockBus(void)
+{
+    GPIO_InitTypeDef gpio;
+    uint16_t lines;
+    uint8_t result = BSP_IIC_ERR_BUSY;
+    uint32_t timeout;
+
+    I2C_Cmd(IIC_PERIPH, DISABLE);
+    GPIO_SetBits(IIC_GPIO_PORT, IIC_SCL_PIN | IIC_SDA_PIN);
+    gpio.GPIO_Pin = IIC_SCL_PIN | IIC_SDA_PIN;
+    gpio.GPIO_Mode = GPIO_Mode_Out_OD;
+    gpio.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_Init(IIC_GPIO_PORT, &gpio);
+    Delay_us(5U);
+    lines = GPIO_ReadInputData(IIC_GPIO_PORT);
+    g_debugIicLines = ((lines & IIC_SCL_PIN) ? 1U : 0U) |
+                     ((lines & IIC_SDA_PIN) ? 2U : 0U);
+    g_debugIicRecovery = 2U;
+    if (IIC_WaitPins(gpio.GPIO_Pin, gpio.GPIO_Pin) != BSP_IIC_OK)
+        goto restore;
+
+    GPIO_ResetBits(IIC_GPIO_PORT, IIC_SDA_PIN);
+    if (IIC_WaitPins(IIC_SDA_PIN, 0U) != BSP_IIC_OK) goto restore;
+    Delay_us(5U);
+    GPIO_ResetBits(IIC_GPIO_PORT, IIC_SCL_PIN);
+    if (IIC_WaitPins(IIC_SCL_PIN, 0U) != BSP_IIC_OK) goto restore;
+    Delay_us(5U);
+    GPIO_SetBits(IIC_GPIO_PORT, IIC_SCL_PIN);
+    if (IIC_WaitPins(IIC_SCL_PIN, IIC_SCL_PIN) != BSP_IIC_OK) goto restore;
+    Delay_us(5U);
+    GPIO_SetBits(IIC_GPIO_PORT, IIC_SDA_PIN);
+    if (IIC_WaitPins(IIC_SDA_PIN, IIC_SDA_PIN) != BSP_IIC_OK) goto restore;
+    Delay_us(5U);
+    result = BSP_IIC_OK;
+
+restore:
+    GPIO_SetBits(IIC_GPIO_PORT, IIC_SCL_PIN | IIC_SDA_PIN);
+    gpio.GPIO_Mode = GPIO_Mode_AF_OD;
+    GPIO_Init(IIC_GPIO_PORT, &gpio);
+    I2C_SoftwareResetCmd(IIC_PERIPH, ENABLE);
+    I2C_SoftwareResetCmd(IIC_PERIPH, DISABLE);
+    IIC_ConfigPeripheral();
+    if (result != BSP_IIC_OK) return result;
+
+    timeout = IIC_TIMEOUT_LOOPS;
+    while (I2C_GetFlagStatus(IIC_PERIPH, I2C_FLAG_BUSY) != RESET)
+    {
+        if (--timeout == 0U)
+        {
+            g_debugIicRecovery = 3U;
+            return BSP_IIC_ERR_BUSY;
+        }
+    }
+    g_debugIicRecovery = 1U;
+    return BSP_IIC_OK;
 }
 
 static uint8_t IIC_GetError(void)
@@ -65,7 +141,7 @@ static uint8_t IIC_WaitBusFree(void)
         if (result != BSP_IIC_OK)
             return result;
         if (--timeout == 0U)
-            return BSP_IIC_ERR_BUSY;
+            return IIC_UnlockBus();
     }
     return BSP_IIC_OK;
 }
@@ -104,6 +180,8 @@ void BSP_IIC_Init(void)
 {
     GPIO_InitTypeDef GPIO_InitStructure;
 
+    g_debugIicRecovery = 0U;
+    g_debugIicLines = 0U;
     RCC_APB2PeriphClockCmd(IIC_GPIO_CLK, ENABLE);
     RCC_APB1PeriphClockCmd(IIC_PERIPH_CLK, ENABLE);
 
@@ -113,11 +191,13 @@ void BSP_IIC_Init(void)
     GPIO_Init(IIC_GPIO_PORT, &GPIO_InitStructure);
 
     IIC_ConfigPeripheral();
+    if (I2C_GetFlagStatus(IIC_PERIPH, I2C_FLAG_BUSY) != RESET)
+        (void)IIC_UnlockBus();
 }
 
 void BSP_IIC_Recover(void)
 {
-    IIC_Abort();
+    (void)IIC_UnlockBus();
 }
 
 uint8_t BSP_IIC_WriteAddr(uint8_t addr7, uint8_t reg, uint8_t data)

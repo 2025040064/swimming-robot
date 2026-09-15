@@ -784,6 +784,26 @@
               <FileType>5</FileType>
               <FilePath>.\User\bsp\bsp_debug.h</FilePath>
             </File>
+            <File>
+              <FileName>bsp_mpu_motor_test.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\bsp\test\bsp_mpu_motor_test.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_mpu_motor_test.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\User\bsp\test\bsp_mpu_motor_test.h</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_oled.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\bsp\oled\bsp_oled.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_oled.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\User\bsp\oled\bsp_oled.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -888,6 +908,16 @@
               <FileName>app_task.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\User\app\app_task.h</FilePath>
+            </File>
+            <File>
+              <FileName>app_oled.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\app\app_oled.c</FilePath>
+            </File>
+            <File>
+              <FileName>app_oled.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\User\app\app_oled.h</FilePath>
             </File>
           </Files>
         </Group>

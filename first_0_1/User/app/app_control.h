@@ -16,18 +16,20 @@
 #define CRUISE_SPEED    2000
 #define APPROACH_SPEED  3000
 #define TURN_SPEED      2000
-#define COLLECT_SPEED   4000
 #define AVOID_SPEED     2800
 
 /* PWM increment per 20 ms state-machine update. */
 #define RAMP_STEP       200
 
+int16_t App_Ctrl_GetLeftPwm(void);
+int16_t App_Ctrl_GetRightPwm(void);
+void App_Ctrl_SafetyUpdate(uint8_t sampleValid);
+uint8_t App_Ctrl_SafetyReady(void);
+RobotState_t App_Ctrl_GetSafetyState(void);
 void App_Ctrl_Init(void);
 void App_Ctrl_SetTarget(int16_t x, int16_t y);
 void App_Ctrl_SearchCruise(void);
 uint8_t App_Ctrl_ApproachTarget(void);
-void App_Ctrl_StartCollection(void);
-void App_Ctrl_StopCollection(void);
 void App_Ctrl_AvoidTurn(uint8_t direction);
 void App_Ctrl_StopAll(void);
 void App_Ctrl_ReturnBase(void);
