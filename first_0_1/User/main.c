@@ -86,6 +86,8 @@ int main(void)
     BSP_Board_Init();
     BSP_SysTick_Init();
     BSP_LED_Init();
+    DBG_INIT();
+    DBG_PRINT("DEBUG_READY\r\n");
 
 #if MOTOR_TEST_ENABLE
     Motor_Test_Run();
@@ -95,6 +97,7 @@ int main(void)
     DRV_TB6612_Init();
     BSP_MpuMotorDirectionDiagnostic();
     DRV_TB6612_SetStandby(1, 0);
+    BSP_IIC_Init();
     App_OLED_Init();
     App_OLED_ShowBootStage(11U);
     BSP_K230_Init(K230_DEFAULT_BAUDRATE);
@@ -102,7 +105,6 @@ int main(void)
     BSP_Ultrasonic_Init();
     g_debugBootStage = 20U;
     App_OLED_ShowBootStage(20U);
-    BSP_IIC_Init();
     g_debugBootStage = 30U;
     App_OLED_ShowBootStage(30U);
     imuInitResult = BSP_MPU6050_Init();
@@ -131,6 +133,7 @@ int main(void)
         if (imuInitResult == BSP_IIC_OK) App_OLED_SetInitResult(0x82U);
         App_Ctrl_StopAll();
         DRV_TB6612_SetStandby(1, 0);
+        DRV_TB6612_SetStandby(2, 0);
         (void)BSP_K230_SendString("IMU_INIT_FAILED\n");
         while (1)
         {

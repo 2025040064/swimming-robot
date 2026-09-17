@@ -13,7 +13,7 @@
 #define K230_USART_IRQn             USART1_IRQn
 #define K230_DEFAULT_BAUDRATE       115200UL
 
-/* PA2/PA3 are intentionally unassigned: this hardware has no GPS module. */
+/* PA2/PA3 are TIM2_CH3/CH4 PWM outputs for the K230 gimbal TB6612. */
 
 #define K230_RX_BUF_SIZE            256U
 #define K230_TX_BUF_SIZE            256U

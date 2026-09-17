@@ -1,5 +1,5 @@
 /*
- * Hardware I2C1 master for the MPU6050 bus. A future I2C sensor may share it.
+ * Hardware I2C1 master shared by the MPU6050 and the 0.96-inch OLED.
  *
  * BSP_Board_Init() applies GPIO_Remap_I2C1 before this module configures
  * PB8/PB9 as AF open-drain. Transactions use unshifted 7-bit addresses;
@@ -235,6 +235,49 @@ uint8_t BSP_IIC_WriteAddr(uint8_t addr7, uint8_t reg, uint8_t data)
     return BSP_IIC_OK;
 
 write_error:
+    IIC_Abort();
+    return result;
+}
+
+uint8_t BSP_IIC_WriteBuffer(uint8_t addr7, uint8_t prefix,
+                            const uint8_t *buf, uint8_t len)
+{
+    uint8_t result;
+
+    if ((addr7 > 0x7FU) || (buf == 0) || (len == 0U))
+        return BSP_IIC_ERR_PARAM;
+
+    result = IIC_WaitBusFree();
+    if (result != BSP_IIC_OK)
+    {
+        IIC_Abort();
+        return result;
+    }
+
+    result = IIC_Start();
+    if (result != BSP_IIC_OK) goto write_buffer_error;
+    result = IIC_SendAddress(addr7, I2C_Direction_Transmitter);
+    if (result != BSP_IIC_OK) goto write_buffer_error;
+    IIC_ClearAddrFlag();
+
+    result = IIC_WaitFlagSet(I2C_FLAG_TXE);
+    if (result != BSP_IIC_OK) goto write_buffer_error;
+    I2C_SendData(IIC_PERIPH, prefix);
+
+    while (len > 0U)
+    {
+        result = IIC_WaitFlagSet(I2C_FLAG_TXE);
+        if (result != BSP_IIC_OK) goto write_buffer_error;
+        I2C_SendData(IIC_PERIPH, *buf++);
+        len--;
+    }
+
+    result = IIC_WaitFlagSet(I2C_FLAG_BTF);
+    if (result != BSP_IIC_OK) goto write_buffer_error;
+    I2C_GenerateSTOP(IIC_PERIPH, ENABLE);
+    return BSP_IIC_OK;
+
+write_buffer_error:
     IIC_Abort();
     return result;
 }

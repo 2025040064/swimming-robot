@@ -9,6 +9,8 @@
 #include "robot_config.h"
 #include "Delay.h"
 
+#define OLED_BLOCKING_TASK_LIMIT 64U
+
 static uint8_t g_initResult, g_forceFrame;
 static uint32_t g_frameTick, g_sendTick, g_retryTick;
 static char g_line[OLED_TEXT_COLUMNS + 1U];
@@ -107,6 +109,17 @@ static void Render(uint32_t now)
     BSP_OLED_Present();
 }
 
+static uint8_t FlushBlocking(void)
+{
+    uint8_t attempts = 0U;
+    while (BSP_OLED_IsBusy() && attempts < OLED_BLOCKING_TASK_LIMIT)
+    {
+        BSP_OLED_Task();
+        attempts++;
+    }
+    return BSP_OLED_IsBusy() ? 0U : 1U;
+}
+
 void App_OLED_Init(void)
 {
     g_initResult = 255U;
@@ -119,14 +132,14 @@ void App_OLED_Init(void)
     BSP_OLED_Text(4U, "X UP  Y FORWARD");
     BSP_OLED_Present();
     /* Only the pre-motor startup screen is flushed synchronously. */
-    while (BSP_OLED_IsBusy()) BSP_OLED_Task();
+    (void)FlushBlocking();
 }
 
 void App_OLED_ShowBootStage(uint8_t stage)
 {
     const char *name;
     if (!BSP_OLED_IsPresent()) return;
-    while (BSP_OLED_IsBusy()) BSP_OLED_Task();
+    if (!FlushBlocking()) return;
     if (stage == 11U) name = "K230 AND ULTRASONIC";
     else if (stage == 20U) name = "I2C SETUP";
     else if (stage == 30U) name = "MPU6050 INIT";
@@ -136,7 +149,7 @@ void App_OLED_ShowBootStage(uint8_t stage)
     BSP_OLED_Text(2U, name);
     BSP_OLED_Text(4U, "MOTORS HELD OFF");
     BSP_OLED_Present();
-    while (BSP_OLED_IsBusy()) BSP_OLED_Task();
+    (void)FlushBlocking();
 }
 
 void App_OLED_SetInitResult(uint8_t result)
@@ -145,10 +158,10 @@ void App_OLED_SetInitResult(uint8_t result)
     g_initResult = result;
     g_forceFrame = 1U;
     if (!BSP_OLED_IsPresent()) return;
-    while (BSP_OLED_IsBusy()) BSP_OLED_Task();
+    if (!FlushBlocking()) return;
     now = BSP_GetTick();
     Render(now);
-    while (BSP_OLED_IsBusy()) BSP_OLED_Task();
+    (void)FlushBlocking();
     g_frameTick = now;
     g_forceFrame = 0U;
 }

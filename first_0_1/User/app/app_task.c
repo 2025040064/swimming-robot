@@ -133,7 +133,9 @@ void App_Task_Scheduler(void)
         ore = BSP_K230_GetOreCount();
         if (ore != lastOre)
         {
-            DBG_PRINT("[WARN] K230 ORE: %lu\n", (unsigned long)(ore - lastOre));
+            DBG_PRINT("[WARN] K230 ORE: ");
+            DBG_U32(ore - lastOre);
+            DBG_PRINT("\r\n");
             lastOre = ore;
         }
     }

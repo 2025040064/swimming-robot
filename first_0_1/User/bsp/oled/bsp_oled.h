@@ -4,13 +4,8 @@
 #include "stm32f10x.h"
 
 /* Assumed module: SSD1306 128x64, four-pin I2C. Controller is unconfirmed.
- * SCK=PB10, SDA=PB11, VDD=3.3V, GND=common ground.
- * These pins no longer carry recovery motor PWM. */
-#define OLED_GPIO_PORT GPIOB
-#define OLED_GPIO_CLK  RCC_APB2Periph_GPIOB
-#define OLED_SCK_PIN   GPIO_Pin_10
-#define OLED_SDA_PIN   GPIO_Pin_11
-#define OLED_I2C_DELAY_US 10U
+ * SCL=PB8, SDA=PB9, VDD=3.3V, GND=common ground.
+ * The OLED shares remapped hardware I2C1 with the MPU6050. */
 #define OLED_RETRY_DELAY_US 50U
 #define OLED_COLUMN_OFFSET 0U
 #define OLED_FRAME_MS 250U

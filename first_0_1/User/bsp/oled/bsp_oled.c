@@ -1,12 +1,13 @@
 #include "bsp_oled.h"
+#include "bsp_iic.h"
 #include "Delay.h"
 #include <string.h>
 
-/* Independent software I2C; each task call sends at most 16 display bytes. */
+/* Shared hardware I2C; each task call sends at most 16 display bytes. */
 static uint8_t g_frame[1024];
 static uint16_t g_position;
 static uint8_t g_busy, g_present, g_address;
-/* 0=not initialized, 1=OK, 2=no ACK, 3=bus held low. */
+/* 0=not initialized, 1=OK, 3=bus error, 4=no ACK. */
 volatile uint32_t g_debugOledStatus;
 volatile uint32_t g_debugOledAddress;
 volatile uint32_t g_debugOledNoAckCount;
@@ -52,90 +53,28 @@ static uint8_t Glyph(char ch, uint8_t col)
     }
 }
 
-static uint8_t ClockHigh(void)
+static uint8_t WriteAttempt(uint8_t control, const uint8_t *data, uint8_t count)
 {
-    uint16_t timeout = 200U;
-    GPIO_SetBits(OLED_GPIO_PORT, OLED_SCK_PIN);
-    while (!GPIO_ReadInputDataBit(OLED_GPIO_PORT, OLED_SCK_PIN))
-    {
-        if (--timeout == 0U)
-        {
-            g_debugOledStatus = 3U;
-            return 0U;
-        }
-    }
-    Delay_us(OLED_I2C_DELAY_US);
-    return 1U;
-}
-
-static void Stop(void)
-{
-    GPIO_ResetBits(OLED_GPIO_PORT, OLED_SCK_PIN | OLED_SDA_PIN);
-    Delay_us(OLED_I2C_DELAY_US);
-    (void)ClockHigh();
-    GPIO_SetBits(OLED_GPIO_PORT, OLED_SDA_PIN);
-    Delay_us(OLED_I2C_DELAY_US);
-}
-
-static uint8_t Start(void)
-{
-    GPIO_SetBits(OLED_GPIO_PORT, OLED_SDA_PIN);
-    if (!ClockHigh()) return 0U;
-    if (!GPIO_ReadInputDataBit(OLED_GPIO_PORT, OLED_SDA_PIN))
-    {
-        g_debugOledStatus = 3U;
-        return 0U;
-    }
-    GPIO_ResetBits(OLED_GPIO_PORT, OLED_SDA_PIN);
-    Delay_us(OLED_I2C_DELAY_US);
-    GPIO_ResetBits(OLED_GPIO_PORT, OLED_SCK_PIN);
-    return 1U;
-}
-
-static uint8_t SendByte(uint8_t value)
-{
-    uint8_t i, ack;
-    for (i = 0U; i < 8U; i++)
-    {
-        GPIO_WriteBit(OLED_GPIO_PORT, OLED_SDA_PIN,
-                      (value & 0x80U) ? Bit_SET : Bit_RESET);
-        Delay_us(OLED_I2C_DELAY_US);
-        if (!ClockHigh()) return 0U;
-        GPIO_ResetBits(OLED_GPIO_PORT, OLED_SCK_PIN);
-        value <<= 1;
-    }
-    GPIO_SetBits(OLED_GPIO_PORT, OLED_SDA_PIN);
-    Delay_us(OLED_I2C_DELAY_US);
-    if (!ClockHigh()) return 0U;
-    ack = !GPIO_ReadInputDataBit(OLED_GPIO_PORT, OLED_SDA_PIN);
-    GPIO_ResetBits(OLED_GPIO_PORT, OLED_SCK_PIN);
-    if (!ack)
+    uint8_t result = BSP_IIC_WriteBuffer(g_address, control, data, count);
+    if (result == BSP_IIC_OK) return result;
+    if (result == BSP_IIC_ERR_NACK)
     {
         g_debugOledStatus = 4U;
         g_debugOledNoAckCount++;
     }
-    return 1U;
-}
-
-static uint8_t WriteAttempt(uint8_t control, const uint8_t *data, uint8_t count)
-{
-    uint8_t i;
-    if (!Start()) goto failed;
-    if (!SendByte((uint8_t)(g_address << 1)) || !SendByte(control)) goto failed;
-    for (i = 0U; i < count; i++)
-        if (!SendByte(data[i])) goto failed;
-    Stop();
-    return 1U;
-failed:
-    Stop();
-    return 0U;
+    else
+        g_debugOledStatus = 3U;
+    return result;
 }
 
 static uint8_t Write(uint8_t control, const uint8_t *data, uint8_t count)
 {
-    if (WriteAttempt(control, data, count)) return 1U;
+    uint8_t result = WriteAttempt(control, data, count);
+    if (result == BSP_IIC_OK) return 1U;
+    if (result != BSP_IIC_ERR_NACK) BSP_IIC_Recover();
     Delay_us(OLED_RETRY_DELAY_US);
-    if (WriteAttempt(control, data, count))
+    result = WriteAttempt(control, data, count);
+    if (result == BSP_IIC_OK)
     {
         g_debugOledStatus = g_debugOledNoAckCount ? 4U : 1U;
         return 1U;
@@ -146,7 +85,6 @@ static uint8_t Write(uint8_t control, const uint8_t *data, uint8_t count)
 
 uint8_t BSP_OLED_Init(void)
 {
-    GPIO_InitTypeDef gpio;
     static const uint8_t setup[] = {
         0xD5,0x80,0xA8,0x3F,0xD3,0x00,0x40,0xA1,0xC8,
         0xDA,0x12,0x81,0x8F,0xD9,0xF1,0xDB,0x40,0xA4,0xA6,
@@ -154,13 +92,6 @@ uint8_t BSP_OLED_Init(void)
     };
     g_present = g_busy = 0U;
     g_debugOledStatus = g_debugOledAddress = 0U;
-    g_debugOledNoAckCount = 0U;
-    RCC_APB2PeriphClockCmd(OLED_GPIO_CLK, ENABLE);
-    GPIO_SetBits(OLED_GPIO_PORT, OLED_SCK_PIN | OLED_SDA_PIN);
-    gpio.GPIO_Pin = OLED_SCK_PIN | OLED_SDA_PIN;
-    gpio.GPIO_Mode = GPIO_Mode_Out_OD;
-    gpio.GPIO_Speed = GPIO_Speed_50MHz;
-    GPIO_Init(OLED_GPIO_PORT, &gpio);
     g_debugOledNoAckCount = 0U;
     g_address = 0x3CU;
     g_debugOledAddress = g_address;

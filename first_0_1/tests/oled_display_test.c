@@ -7,7 +7,7 @@
 #include "app/app_oled.h"
 
 static uint32_t tick, sendCalls, initCalls;
-static uint8_t attached = 1U, present, chunks, ready, valid;
+static uint8_t attached = 1U, present, chunks, ready, valid, stalled;
 static uint16_t count;
 static MPU6050_Data_t data;
 static char rows[8][22];
@@ -37,7 +37,7 @@ void BSP_OLED_Text(uint8_t row, const char *text)
     strcpy(rows[row], text);
 }
 void BSP_OLED_Present(void) { assert(!chunks); chunks = 64U; }
-void BSP_OLED_Task(void) { sendCalls++; if (chunks) chunks--; }
+void BSP_OLED_Task(void) { sendCalls++; if (chunks && !stalled) chunks--; }
 static void finishFrame(void)
 {
     unsigned int i;
@@ -124,6 +124,13 @@ int main(void)
     App_OLED_Task();
     finishFrame();
     assert(tick < 100U);
+
+    calls = sendCalls;
+    chunks = 64U;
+    stalled = 1U;
+    App_OLED_ShowBootStage(20U);
+    assert(sendCalls == calls + 64U);
+    assert(chunks == 64U);
     puts("PASS: OLED raw data, calibration/angles, fault/stale labels, row bounds, incremental refresh, disconnect/reconnect and clock wrap");
     return 0;
 }

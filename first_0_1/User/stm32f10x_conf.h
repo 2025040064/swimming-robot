@@ -28,8 +28,8 @@
 
 /* #define USE_FULL_ASSERT  1 */
 
-/* No spare UART exists: keep DEBUG_ENABLE undefined and debug through SWD. */
-/* #define DEBUG_ENABLE */
+/* USART3 on PB10/PB11 is reserved for the independent debug serial port. */
+#define DEBUG_ENABLE
 
 #ifdef  USE_FULL_ASSERT
   #define assert_param(expr) ((expr) ? (void)0 : assert_failed((uint8_t *)__FILE__, __LINE__))

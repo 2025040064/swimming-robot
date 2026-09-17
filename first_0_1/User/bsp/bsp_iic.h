@@ -23,6 +23,8 @@
 void    BSP_IIC_Init(void);
 void    BSP_IIC_Recover(void);
 uint8_t BSP_IIC_WriteAddr(uint8_t addr7, uint8_t reg, uint8_t data);
+uint8_t BSP_IIC_WriteBuffer(uint8_t addr7, uint8_t prefix,
+                            const uint8_t *buf, uint8_t len);
 uint8_t BSP_IIC_ReadAddr(uint8_t addr7, uint8_t reg, uint8_t *buf, uint8_t len);
 
 #endif

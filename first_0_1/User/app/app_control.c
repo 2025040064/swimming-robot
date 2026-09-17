@@ -60,6 +60,7 @@ void App_Ctrl_Init(void)
     g_safetyState = STATE_INIT;
     g_thrustScale = 1.0f;
     DRV_TB6612_SetStandby(1, 0);
+    DRV_TB6612_SetStandby(2, 0);
     /* Yaw-only PID. kp=10 -> max P = 10*320 = 3200 < 4000 clamp, so steering
      * stays proportional across the full 0~320px error instead of saturating
      * to bang-bang (kp=18 saturated at ~222px). */
@@ -256,6 +257,7 @@ static void Safety_Latch(RobotState_t fault)
     g_safetyReady = 0U;
     App_Ctrl_StopAll();
     DRV_TB6612_SetStandby(1, 0);
+    DRV_TB6612_SetStandby(2, 0);
 }
 
 void App_Ctrl_SafetyUpdate(uint8_t sampleValid)

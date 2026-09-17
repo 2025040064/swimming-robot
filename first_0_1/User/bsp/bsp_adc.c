@@ -3,7 +3,7 @@
  *
  * The original code configured PA8 as ADC input with ADC_Channel_8.
  * On STM32F103C8T6, PA8 has no ADC function: ADC_Channel_8 maps to PB0,
- * which is already used by the conveyor motor direction pin (TB2_BIN1).
+ * which is already used by the gimbal tilt motor direction pin (TB2_BIN1).
  * The "battery voltage" was therefore reading a motor control level.
  *
  * Every ADC-capable pin (PA0~PA7, PB0, PB1) is currently occupied, so there
